@@ -22,7 +22,7 @@ code { font-family: var(--code-font); font-size: .92em; font-variant-ligatures: 
 header.site { position: fixed; inset: 0 0 auto; z-index: 50; height: var(--header-h); display: flex; align-items: center; padding: 0 1.5rem; background: var(--page-bg); box-shadow: 0 0 6px lightgray; }
 header.site a { color: var(--page-ink); text-decoration: none; font-weight: 700; font-size: 1.35rem; }
 
-nav.toc { position: fixed; top: var(--header-h); bottom: 0; left: 0; width: var(--toc-w); overflow-y: auto; padding: 1.25rem 1rem; background: var(--toc-bg); border-right: 1px solid var(--page-rule); }
+nav.toc { box-sizing: border-box; position: fixed; top: var(--header-h); bottom: 0; left: 0; width: var(--toc-w); overflow-y: auto; padding: 1.25rem 1rem; background: var(--toc-bg); border-right: 1px solid var(--page-rule); }
 nav.toc .toc-title { font-weight: 700; margin-bottom: .6rem; }
 nav.toc ol { list-style: none; margin: 0; padding-left: .6rem; border-left: 1px dotted var(--page-ink); font-size: .95rem; }
 nav.toc li { margin: .2rem 0; }
@@ -30,7 +30,7 @@ nav.toc a { color: #333; text-decoration: none; display: grid; grid-template-col
 nav.toc a:hover { color: #000; text-decoration: underline; }
 nav.toc a.current { color: #000; font-weight: 700; }
 
-main { margin-left: var(--toc-w); padding-top: var(--header-h); counter-reset: section; }
+main { margin-left: var(--toc-w); padding-top: var(--header-h); counter-reset: section; container-type: inline-size; }
 .content { max-width: var(--content-w); margin: 0 auto; padding: 1.5rem 1.5rem 5rem; }
 h1, h2, h3 { font-weight: 700; text-rendering: optimizeLegibility; text-wrap: balance; }
 h1 { font-size: 2.3rem; margin: 1.5rem 0 1.3rem; }
@@ -44,6 +44,17 @@ dl.rules-in-lean { margin: 1rem 0; }
 dl.rules-in-lean dt { font-weight: 700; margin-top: 1rem; }
 dl.rules-in-lean dt .g { font-family: var(--code-font); display: inline-block; width: 1.4rem; }
 dl.rules-in-lean dd { margin: .25rem 0 0 1.4rem; }
+/* The bench: rules and examples beside the workbench. It breaks out of the text column,
+   centered on it, and stacks when the page is too narrow for two columns. */
+.bench { --bench-w: min(80rem, 100cqw - 3rem); width: var(--bench-w); margin: 1.75rem calc((100% - var(--bench-w)) / 2); display: grid; gap: 1.5rem; }
+.bench > .redex { margin: 0; }
+@container (min-width: 62rem) {
+  .bench { grid-template-columns: 16.5rem minmax(0, 1fr); gap: 2.25rem; align-items: start; }
+}
+/* The rail follows the reader only when all of it fits on screen. */
+@container (min-width: 62rem) {
+  @media (min-height: 66rem) { .bench > [data-redex="rules"] { position: sticky; top: calc(var(--header-h) + 1.25rem); } }
+}
 .note { color: var(--page-muted); border-left: 3px solid var(--page-rule); padding-left: .9rem; }
 
 @media (max-width: 1000px) {

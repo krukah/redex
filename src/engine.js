@@ -485,6 +485,20 @@ export function exploreGraph(start, env, withEta, cap) {
   return { root: k0, nodes, edges, truncated };
 }
 
+// Whether the explored graph G contains a reduction cycle reachable from its root.
+export function hasCycle(G) {
+  const out = new Map([...G.nodes.keys()].map(k => [k, []]));
+  G.edges.forEach(e => out.get(e.from).push(e.to));
+  const state = new Map();
+  const dfs = k => {
+    state.set(k, 1);
+    for (const to of out.get(k)) { const s = state.get(to); if (s === 1 || (!s && dfs(to))) return true; }
+    state.set(k, 2);
+    return false;
+  };
+  return dfs(G.root);
+}
+
 export function runStrategy(start, env, next, cap) {
   const rows = [{ term: start, kind: null }]; let t = start;
   for (let i = 0; i < cap; i++) {

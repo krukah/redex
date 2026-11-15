@@ -17,11 +17,10 @@
   <nav class="toc" aria-label="Contents">
     <div class="toc-title">Contents</div>
     <ol>
-      <li><a href="#rules"><span>1.</span>The rules</a></li>
-      <li><a href="#workbench"><span>2.</span>Workbench</a></li>
-      <li><a href="#paths"><span>3.</span>Every path</a></li>
-      <li><a href="#strategies"><span>4.</span>Strategies</a></li>
-      <li><a href="#lean"><span>5.</span>In Lean 4</a></li>
+      <li><a href="#workbench"><span>1.</span>Workbench</a></li>
+      <li><a href="#paths"><span>2.</span>Every path</a></li>
+      <li><a href="#strategies"><span>3.</span>Strategies</a></li>
+      <li><a href="#lean"><span>4.</span>In Lean 4</a></li>
     </ol>
   </nav>
 
@@ -30,17 +29,15 @@
       <h1>Redex Workbench</h1>
       <p class="lede">Lean decides that two terms are equal by rewriting them until they match. Each kind of rewrite has a Greek letter, and each one replaces a term with another that means the same thing. This page lets you fire them by hand.</p>
 
-      <section id="rules">
-        <h2>The rules</h2>
-        <p>A <em>redex</em> is a part of a term that a rule can rewrite. Each row loads a small example into the workbench.</p>
-        <div data-redex="rules"></div>
-      </section>
-
       <section id="workbench">
         <h2>Workbench</h2>
+        <p>A <em>redex</em> is a part of a term that a rule can rewrite. Pick a rule or an example to load it into the workbench. Each example’s thumbnail is its whole reduction graph in miniature (section 2).</p>
         <p>Each box is one piece of syntax: a <b>λ</b> box with its binder on a tab, an application box with the function first and its arguments after it, a pair box. A variable is a tag in the color of the binder it belongs to, and the arcs above link each one to that binder.</p>
         <p>A badge on a box’s corner marks a redex. Hover it to see the rule match: the rule’s pattern variables and the pieces of the term they stand for get the same highlighter color. Click it and each piece moves to where the result uses it. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head, and <b>Normalize</b> runs until no redex is left.</p>
-        <div data-redex="workbench" data-example="beta"></div>
+        <div class="bench">
+          <div data-redex="rules"></div>
+          <div data-redex="workbench" data-example="beta"></div>
+        </div>
       </section>
 
       <section id="paths">

@@ -8,7 +8,7 @@
 //   edge       colored by the rule that fired; edges between rows point down, edges within a
 //              row arc above it, edges back to an earlier row swing out to the right
 //   route      an optional strategy drawn as a wide band along the edges it takes
-import { KCLS, esc, exploreGraph, key, applicativeNext, normalNext, runStrategy, size, text, whnfNext } from './engine.js';
+import { KCLS, esc, exploreGraph, hasCycle, key, applicativeNext, normalNext, runStrategy, size, text, whnfNext } from './engine.js';
 import { renderBlocks } from './blocks.js';
 import { $$, motion, nextId } from './dom.js';
 
@@ -23,19 +23,6 @@ const ROUTES = [
   { id: 'whnf', label: 'Head only', next: whnfNext },
 ];
 const FORM_LABEL = { red: 'reducible', whnf: 'weak head normal form', nf: 'normal form' };
-
-function hasCycle(G) {
-  const out = new Map([...G.nodes.keys()].map(k => [k, []]));
-  G.edges.forEach(e => out.get(e.from).push(e.to));
-  const state = new Map();
-  const dfs = k => {
-    state.set(k, 1);
-    for (const to of out.get(k)) { const s = state.get(to); if (s === 1 || (!s && dfs(to))) return true; }
-    state.set(k, 2);
-    return false;
-  };
-  return dfs(G.root);
-}
 
 export function mountGraph(root, session) {
   const uid = `rdx${nextId()}`;
