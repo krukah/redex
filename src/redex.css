@@ -1,0 +1,223 @@
+/* Redex widgets. Everything is scoped under .redex and colored through --rdx-* tokens.
+   A host page re-themes the widgets by setting these tokens on :root or on .redex;
+   the defaults below have zero specificity, so any host rule wins.
+   Defaults follow the Lean documentation: black on white, Lean blue, thin gray rules. */
+:where(:root) {
+  --rdx-bg: #ffffff;
+  --rdx-sunk: #fafafa;
+  --rdx-ink: #000000;
+  --rdx-muted: #5d6669;
+  --rdx-line: #d0d0d0;
+  --rdx-node: #888888;
+  --rdx-hover: #eeeeee;
+  --rdx-accent: #0073a3;
+  --rdx-danger: #cc0000;
+  --rdx-text-font: "Source Sans 3", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+  --rdx-code-font: "Source Code Pro", "Noto Sans Mono", ui-monospace, monospace;
+  /* One hue per rule. */
+  --rdx-alpha: #6a4c93;
+  --rdx-beta: #0073a3;
+  --rdx-eta: #0d7f6c;
+  --rdx-delta: #c4401f;
+  --rdx-zeta: #a8326e;
+  --rdx-iota: #4d7a1f;
+  --rdx-proj: #94650a;
+}
+
+.redex { display: grid; gap: .75rem; margin: 1.25rem 0; min-width: 0; color: var(--rdx-ink); font-family: var(--rdx-text-font); font-size: 1rem; line-height: 1.45; }
+.redex *, .redex *::before, .redex *::after { box-sizing: border-box; }
+.redex [hidden] { display: none !important; }
+.redex p { margin: 0; }
+.redex code, .redex kbd { font-family: var(--rdx-code-font); font-size: .9em; font-variant-ligatures: none; }
+.redex kbd { border: 1px solid var(--rdx-line); border-bottom-width: 2px; border-radius: 3px; padding: 0 .3em; background: var(--rdx-bg); }
+.redex .rdx-grow { flex: 1; }
+.redex .rdx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.redex .k-alpha { --rc: var(--rdx-alpha); } .redex .k-beta { --rc: var(--rdx-beta); } .redex .k-eta { --rc: var(--rdx-eta); }
+.redex .k-delta { --rc: var(--rdx-delta); } .redex .k-zeta { --rc: var(--rdx-zeta); } .redex .k-iota { --rc: var(--rdx-iota); }
+.redex .k-proj { --rc: var(--rdx-proj); } .redex .k-none { --rc: var(--rdx-muted); }
+
+/* ---------- controls ---------- */
+.redex .rdx-btn { font: 600 .9rem/1 var(--rdx-text-font); padding: .5rem .8rem; border: 1px solid var(--rdx-line); border-radius: 3px; background: var(--rdx-bg); color: var(--rdx-ink); cursor: pointer; }
+.redex .rdx-btn:hover:not(:disabled) { background: var(--rdx-hover); }
+.redex .rdx-btn.primary { border-color: var(--rdx-accent); color: var(--rdx-accent); }
+.redex .rdx-btn.primary:hover:not(:disabled) { background: var(--rdx-accent); color: var(--rdx-bg); }
+.redex .rdx-btn:disabled { opacity: .4; cursor: default; }
+.redex .rdx-btn:focus-visible, .redex .rdx-link:focus-visible, .redex .rdx-pill:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: 2px; }
+.redex .rdx-link { all: unset; color: var(--rdx-accent); cursor: pointer; }
+.redex .rdx-link:hover { text-decoration: underline; }
+.redex .rdx-link.on { color: var(--rdx-ink); font-weight: 600; }
+.redex .rdx-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
+.redex .rdx-pill { all: unset; cursor: pointer; padding: .3rem .65rem; border: 1px solid var(--rdx-line); border-radius: 3px; font-size: .9rem; }
+.redex .rdx-pill:hover { background: var(--rdx-hover); }
+.redex .rdx-pill.on { border-color: var(--rdx-ink); font-weight: 600; }
+.redex .rdx-toggle { display: inline-flex; gap: .35rem; align-items: center; font-size: .9rem; cursor: pointer; user-select: none; }
+.redex .rdx-toggle input { accent-color: var(--rdx-accent); margin: 0; }
+.redex .rdx-nf { font-weight: 700; }
+.redex .rdx-whnf { font-weight: 700; color: var(--rdx-accent); }
+
+/* ---------- rule marks ---------- */
+.redex .rm { all: unset; display: inline-block; font: 700 .62em/1 var(--rdx-code-font); color: var(--rc); vertical-align: .8em; margin-right: .08em; padding: .05em .1em; border-radius: 2px; cursor: pointer; }
+.redex .rm:hover, .redex .rm:focus-visible { background: var(--rc); color: var(--rdx-bg); }
+.redex .rm.flat { vertical-align: baseline; font-size: .85rem; min-width: 1.1em; text-align: center; cursor: inherit; }
+.redex .rm.flat:hover { background: none; color: var(--rc); }
+
+/* ---------- terms (Verso-like: keywords bold, bound variables italic) ---------- */
+.redex .rdx-tm { font-family: var(--rdx-code-font); white-space: pre; font-variant-ligatures: none; line-height: 1.7; }
+.redex .rk { font-weight: 700; }
+.redex .rp { color: var(--rdx-muted); }
+.redex .rv { font-style: italic; }
+.redex .rfree { color: var(--rdx-muted); }
+.redex .rix { font-style: normal; font-weight: 700; color: var(--rdx-alpha); }
+.redex .rdef { text-decoration: underline dotted var(--rdx-delta); text-underline-offset: 3px; }
+.redex .rj { font-weight: 700; }
+.redex .rb { all: unset; font: inherit; font-style: italic; font-weight: 700; border-radius: 2px; }
+.redex button.rb { cursor: pointer; color: var(--rdx-alpha); text-decoration: underline dotted; text-underline-offset: 4px; }
+.redex button.rb:hover { background: var(--rdx-hover); }
+.redex button.rb:focus-visible { outline: 2px solid var(--rdx-alpha); }
+.redex .lit { background: color-mix(in srgb, var(--rdx-alpha) 16%, transparent); border-radius: 2px; }
+.redex .rn.cap > .rv { color: var(--rdx-danger); font-weight: 700; }
+.redex .rr { cursor: pointer; border-radius: 2px; transition: background .15s, box-shadow .15s; }
+.redex .rr.hot { background: var(--rdx-hover); box-shadow: inset 0 -2px 0 var(--rc); }
+.redex .rr.firing { animation: rdx-fire .34s ease-out; }
+@keyframes rdx-fire { 40% { background: color-mix(in srgb, var(--rc) 25%, transparent); } }
+.redex .fl-alpha { --flc: var(--rdx-alpha); } .redex .fl-beta { --flc: var(--rdx-beta); } .redex .fl-eta { --flc: var(--rdx-eta); }
+.redex .fl-delta { --flc: var(--rdx-delta); } .redex .fl-zeta { --flc: var(--rdx-zeta); } .redex .fl-iota { --flc: var(--rdx-iota); }
+.redex .fl-proj { --flc: var(--rdx-proj); }
+.redex .fl { animation: rdx-flash 1.4s ease-out; border-radius: 2px; }
+@keyframes rdx-flash { 0% { background: color-mix(in srgb, var(--flc) 32%, transparent); } 100% { background: transparent; } }
+.redex .consumed { opacity: .18; transition: opacity .3s; }
+.redex .leaving { opacity: .25; transition: opacity .25s; }
+.redex .landing { background: color-mix(in srgb, var(--rc, var(--rdx-beta)) 25%, transparent); border-radius: 2px; }
+.redex.rdx-flyer { position: fixed; z-index: 60; margin: 0; display: flex; align-items: center; pointer-events: none; transform-origin: 50% 50%; background: var(--rdx-bg); border: 1px solid var(--rdx-line); box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .3); }
+
+/* ---------- workbench ---------- */
+.redex .rdx-notes { display: grid; font-family: var(--rdx-code-font); font-size: .85rem; color: var(--rdx-muted); }
+.redex .rdx-notes:empty { display: none; }
+.redex .rdx-dash { opacity: .6; }
+.redex .rdx-scroll { overflow-x: auto; border: 1px solid var(--rdx-line); background: var(--rdx-sunk); }
+.redex .rdx-stage { position: relative; display: inline-block; min-width: 100%; padding: 1.2rem 1.25rem 1.4rem; font-size: 1.25rem; }
+.redex .rdx-stage.arcs-on { padding-top: 4.6rem; }
+.redex .rdx-stage.small { font-size: 1.05rem; }
+.redex .rdx-stage.small.arcs-on { padding-top: 4rem; }
+.redex .rdx-arcs { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.redex .rarc { fill: none; stroke: var(--rdx-node); stroke-width: 1.2; opacity: .7; transition: stroke .15s, stroke-width .15s; }
+.redex .rarc-end { fill: var(--rdx-node); opacity: .8; }
+.redex .rarc.lit { stroke: var(--rdx-alpha); stroke-width: 2; opacity: 1; background: none; }
+.redex .rarc-end.lit { fill: var(--rdx-alpha); opacity: 1; background: none; }
+.redex .rarc.cap { stroke: var(--rdx-danger); stroke-width: 2; stroke-dasharray: 5 3; opacity: 1; }
+.redex .rarc-end.cap { fill: var(--rdx-danger); opacity: 1; }
+.redex .rdx-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1rem; font-size: .95rem; }
+.redex .rdx-tallies { display: inline-flex; flex-wrap: wrap; gap: .4rem; }
+.redex .rdx-tally { font-family: var(--rdx-code-font); font-size: .85rem; color: var(--rdx-muted); }
+.redex .rdx-stepno { color: var(--rdx-muted); font-variant-numeric: tabular-nums; }
+.redex .rdx-note { flex-basis: 100%; color: var(--rdx-danger); }
+.redex .rdx-readout { min-height: 1.45em; font-size: .9rem; color: var(--rdx-muted); }
+.redex .rdx-readout b, .redex .rdx-readout code { color: var(--rdx-ink); }
+.redex .rdx-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.redex .rdx-controls .rdx-toggle + .rdx-toggle { margin-left: .5rem; }
+.redex .rdx-capture { display: grid; gap: .6rem; padding: .75rem .9rem; border-left: 3px solid var(--rdx-danger); background: var(--rdx-sunk); font-size: .95rem; }
+.redex .rdx-capture b { color: var(--rdx-danger); }
+.redex .rdx-label { font-weight: 700; font-size: .95rem; }
+.redex .rdx-label span { font-weight: 400; color: var(--rdx-muted); }
+.redex .rdx-defs { display: grid; gap: .35rem; }
+.redex .rdx-defs-list { display: grid; gap: .25rem; }
+.redex .rdx-def { overflow-x: auto; font-size: .95rem; padding-left: .75em; }
+.redex details > summary { cursor: pointer; font-weight: 700; font-size: .95rem; }
+.redex .rdx-trace ol { list-style: none; margin: .5rem 0 0; padding: 0; max-height: 16rem; overflow: auto; position: relative; border-left: 1px dotted var(--rdx-ink); }
+.redex .rdx-trace li button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 1.8em auto minmax(0, 1fr); gap: .5rem; align-items: baseline; width: 100%; padding: .2rem .6rem; cursor: pointer; }
+.redex .rdx-trace li button:hover { background: var(--rdx-hover); }
+.redex .rdx-trace li button:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: -2px; }
+.redex .rdx-trace li.cur button { background: var(--rdx-hover); box-shadow: inset 3px 0 0 var(--rdx-accent); }
+.redex .rdx-trace li.fut { opacity: .4; }
+.redex .rdx-ti { font: .8rem var(--rdx-code-font); color: var(--rdx-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.redex .rdx-trace code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: .85rem; }
+.redex .rdx-trace small { grid-column: 3; color: var(--rdx-muted); font-size: .85rem; }
+.redex .rdx-src textarea { display: block; width: 100%; margin-top: .5rem; font: .9rem/1.55 var(--rdx-code-font); padding: .6rem .75rem; border: 1px solid var(--rdx-line); border-radius: 0; background: var(--rdx-sunk); color: var(--rdx-ink); resize: vertical; }
+.redex .rdx-src textarea:focus { outline: 2px solid var(--rdx-accent); outline-offset: -1px; }
+.redex .rdx-src-row { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-top: .5rem; }
+.redex .rdx-syntax { flex: 1 1 18rem; font-size: .85rem; color: var(--rdx-muted); }
+.redex .rdx-err { margin-top: .5rem; color: var(--rdx-danger); }
+
+/* ---------- rule table ---------- */
+.redex .rdx-tablewrap { overflow-x: auto; }
+.redex .rdx-rules { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.redex .rdx-rules th { text-align: left; font-weight: 700; padding: .35rem .5rem; border-bottom: 1px solid var(--rdx-ink); }
+.redex .rdx-rules td { padding: .4rem .5rem; border-bottom: 1px solid var(--rdx-line); vertical-align: baseline; }
+.redex .rdx-rules tbody tr { cursor: pointer; }
+.redex .rdx-rules tbody tr:hover td { background: var(--rdx-hover); }
+.redex .rdx-rules tr.on td { background: color-mix(in srgb, var(--rc) 8%, transparent); }
+.redex .rdx-rules tr.on td:first-child { box-shadow: inset 3px 0 0 var(--rc); }
+.redex .rdx-rules .rdx-g { width: 2.2rem; text-align: center; font: 700 1.3rem/1 var(--rdx-code-font); color: var(--rc); }
+.redex .rdx-rules .rdx-sub { display: block; color: var(--rdx-muted); font-size: .9rem; }
+.redex .rdx-rules code { white-space: nowrap; }
+.redex .rdx-rules td:last-child { text-align: right; }
+.redex .rdx-more { font-size: .95rem; }
+
+/* ---------- reduction graph ---------- */
+.redex .rdx-gbar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; font-size: .9rem; }
+.redex .rdx-gstats { color: var(--rdx-muted); font-variant-numeric: tabular-nums; }
+.redex .rdx-verdict { font-weight: 700; }
+.redex .rdx-verdict:empty { display: none; }
+.redex .rdx-gscroll { overflow: auto; max-height: 40rem; border: 1px solid var(--rdx-line); background: var(--rdx-sunk); }
+.redex .rdx-gsvg { display: block; margin: 0 auto; }
+.redex .rdx-gn { cursor: pointer; }
+.redex .rdx-gn rect { fill: var(--rdx-bg); stroke: var(--rdx-node); stroke-width: 1; transition: stroke .2s, stroke-width .2s; }
+.redex .rdx-gn text { font: 500 11.5px var(--rdx-code-font); fill: var(--rdx-ink); text-anchor: middle; dominant-baseline: central; white-space: pre; }
+.redex .rdx-gn:hover rect { stroke: var(--rdx-ink); }
+.redex .rdx-gn:focus { outline: none; }
+.redex .rdx-gn:focus-visible rect { stroke: var(--rdx-accent); stroke-width: 2.5; }
+.redex .rdx-gn.start rect { stroke: var(--rdx-ink); stroke-width: 2; }
+.redex .rdx-gn.nf rect { fill: var(--rdx-ink); stroke: var(--rdx-ink); }
+.redex .rdx-gn.nf text { fill: var(--rdx-bg); font-weight: 700; }
+.redex .rdx-gn.open rect { stroke-dasharray: 4 3; }
+.redex .rdx-gn.sel rect { stroke: var(--rdx-alpha); stroke-width: 2.5; }
+.redex .rdx-gn.here rect { stroke: var(--rdx-accent); stroke-width: 3; }
+.redex .rdx-ge path { fill: none; stroke: var(--rc); stroke-width: 1.4; opacity: .75; stroke-dasharray: 1; }
+.redex .rdx-ge circle { fill: var(--rdx-bg); stroke: var(--rc); stroke-width: 1.2; }
+.redex .rdx-ge text { font: 700 10px var(--rdx-code-font); fill: var(--rc); text-anchor: middle; dominant-baseline: central; }
+.redex .rdx-ge.walked path { stroke-width: 3.2; opacity: 1; }
+.redex .rdx-gsvg.animate .rdx-gn { animation: rdx-pop .45s both; animation-delay: calc(var(--d) * 70ms); }
+.redex .rdx-gsvg.animate .rdx-ge path { animation: rdx-draw .55s ease-out both; animation-delay: calc(var(--d) * 70ms + 90ms); }
+.redex .rdx-gsvg.animate .rdx-gn.here { animation: rdx-pop .45s both, rdx-here 1.8s ease-in-out infinite; animation-delay: calc(var(--d) * 70ms), 0s; }
+@keyframes rdx-pop { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes rdx-draw { from { stroke-dashoffset: 1; } }
+@keyframes rdx-here { 50% { opacity: .7; } }
+.redex .rdx-glegend { display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; font-size: .85rem; color: var(--rdx-muted); }
+.redex .rdx-glegend span { display: inline-flex; align-items: center; gap: .4rem; }
+.redex .rdx-sw { display: inline-block; width: 1.4rem; height: .85rem; border: 1px solid var(--rdx-node); background: var(--rdx-bg); }
+.redex .rdx-sw.start { border: 2px solid var(--rdx-ink); }
+.redex .rdx-sw.nf { background: var(--rdx-ink); border-color: var(--rdx-ink); }
+.redex .rdx-sw.here { border: 3px solid var(--rdx-accent); }
+.redex .rdx-sw.open { border-style: dashed; }
+.redex .rdx-gsel { display: grid; gap: .4rem; padding: .6rem .9rem; border-left: 3px solid var(--rdx-line); font-size: .95rem; min-width: 0; }
+.redex .rdx-gsel .rdx-tm { overflow-x: auto; font-size: 1rem; }
+.redex .rdx-row { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; color: var(--rdx-muted); }
+.redex .rdx-row .rdx-nf { color: var(--rdx-ink); }
+
+/* ---------- strategy race ---------- */
+.redex .rdx-race-bar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; }
+.redex .rdx-lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.redex .rdx-lane { border: 1px solid var(--rdx-line); display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.redex .rdx-lane header { padding: .6rem .75rem; border-bottom: 1px solid var(--rdx-line); display: grid; gap: .2rem; }
+.redex .rdx-lane-top { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.redex .rdx-lane header p { font-size: .85rem; color: var(--rdx-muted); }
+.redex .rdx-count { font: 700 1.3rem/1 var(--rdx-text-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.redex .rdx-count small { font-size: .8rem; font-weight: 400; color: var(--rdx-muted); margin-left: .25rem; }
+.redex .rdx-lane ol { list-style: none; margin: 0; padding: .4rem; max-height: 18rem; overflow: auto; display: grid; gap: .1rem; align-content: start; background: var(--rdx-sunk); }
+.redex .rdx-lane li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem; align-items: baseline; padding: .1rem .3rem; }
+.redex .rdx-lane li code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .82rem; }
+.redex .rdx-lane li.rdx-end { grid-template-columns: 1fr; font-size: .85rem; font-weight: 700; padding: .3rem .4rem; margin-top: .2rem; }
+.redex .rdx-end.nf { background: var(--rdx-ink); color: var(--rdx-bg); }
+.redex .rdx-end.part { box-shadow: inset 3px 0 0 var(--rdx-accent); color: var(--rdx-accent); }
+.redex .rdx-end.loops { box-shadow: inset 3px 0 0 var(--rdx-danger); color: var(--rdx-danger); }
+.redex .rdx-lane li.pending { display: none; }
+.redex .rdx-lane li.new { animation: rdx-in .3s ease-out both; }
+@keyframes rdx-in { from { opacity: 0; transform: translateY(4px); } }
+
+@media (max-width: 760px) {
+  .redex .rdx-lanes { grid-template-columns: minmax(0, 1fr); }
+  .redex .rdx-stage { font-size: 1.05rem; padding-inline: .9rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .redex *, .redex *::before, .redex *::after { animation: none !important; transition: none !important; }
+}

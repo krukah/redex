@@ -1,0 +1,10 @@
+{
+  "name": "redex-workbench",
+  "private": true,
+  "description": "Interactive reduction rules (α β η δ ζ ι π) for the lambda calculus, styled after the Lean docs.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 8000"
+  }
+}
