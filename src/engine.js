@@ -1,12 +1,17 @@
 // Term engine: syntax, the seven rules, strategies, parser, printer, reduction graph.
 // Pure: no DOM. Tested by test/engine.test.js.
-export const V = n => ({ k: 'var', n });
-export const C = n => ({ k: 'const', n });
-export const L = (x, b) => ({ k: 'lam', x, b });
-export const A = (f, a) => ({ k: 'app', f, a });
-export const LET = (x, v, b) => ({ k: 'let', x, v, b });
-export const P = (a, b) => ({ k: 'pair', a, b });
-export const PR = (i, t) => ({ k: 'proj', i, t });
+// Every node gets a fresh `uid`. A node derived from an older one records it in `from`,
+// so a renderer can tell where each piece of a result came from.
+let UID = 0;
+const mk = o => ((o.uid = ++UID), o);
+export const V = n => mk({ k: 'var', n });
+export const C = n => mk({ k: 'const', n });
+export const L = (x, b) => mk({ k: 'lam', x, b });
+export const A = (f, a) => mk({ k: 'app', f, a });
+export const LET = (x, v, b) => mk({ k: 'let', x, v, b });
+export const P = (a, b) => mk({ k: 'pair', a, b });
+export const PR = (i, t) => mk({ k: 'proj', i, t });
+const from = (n, old) => ((n.from = old.uid), n);
 
 export const PRIMS = new Set(['zero', 'succ', 'Nat.rec']);
 export const ALIAS = { 'Nat.zero': 'zero', 'Nat.succ': 'succ' };
@@ -16,13 +21,13 @@ export const KIDS = { var: [], const: [], lam: ['b'], app: ['f', 'a'], let: ['v'
 
 export function clone(t) {
   switch (t.k) {
-    case 'var': return V(t.n);
-    case 'const': return C(t.n);
-    case 'lam': return L(t.x, clone(t.b));
-    case 'app': return A(clone(t.f), clone(t.a));
-    case 'let': return LET(t.x, clone(t.v), clone(t.b));
-    case 'pair': return P(clone(t.a), clone(t.b));
-    case 'proj': return PR(t.i, clone(t.t));
+    case 'var': return from(V(t.n), t);
+    case 'const': return from(C(t.n), t);
+    case 'lam': return from(L(t.x, clone(t.b)), t);
+    case 'app': return from(A(clone(t.f), clone(t.a)), t);
+    case 'let': return from(LET(t.x, clone(t.v), clone(t.b)), t);
+    case 'pair': return from(P(clone(t.a), clone(t.b)), t);
+    case 'proj': return from(PR(t.i, clone(t.t)), t);
   }
 }
 export function size(t) { let n = 1; for (const c of KIDS[t.k]) n += size(t[c]); return n; }
@@ -50,7 +55,7 @@ export function fresh(base, avoid) {
     if (!avoid.has(n) && !CONSTS.has(n)) return n;
   }
 }
-export function stripMarks(t) { delete t.mark; for (const c of KIDS[t.k]) stripMarks(t[c]); }
+export function stripMarks(t) { delete t.mark; delete t.from; for (const c of KIDS[t.k]) stripMarks(t[c]); }
 
 // Capture-avoiding substitution t[x := s]. Copies of s get `mark`.
 export function subst(t, x, s, fvs, mark) {
@@ -60,9 +65,9 @@ export function subst(t, x, s, fvs, mark) {
       const c = clone(s); if (mark) c.mark = mark; return c;
     }
     case 'const': return t;
-    case 'app': return A(subst(t.f, x, s, fvs, mark), subst(t.a, x, s, fvs, mark));
-    case 'pair': return P(subst(t.a, x, s, fvs, mark), subst(t.b, x, s, fvs, mark));
-    case 'proj': return PR(t.i, subst(t.t, x, s, fvs, mark));
+    case 'app': return from(A(subst(t.f, x, s, fvs, mark), subst(t.a, x, s, fvs, mark)), t);
+    case 'pair': return from(P(subst(t.a, x, s, fvs, mark), subst(t.b, x, s, fvs, mark)), t);
+    case 'proj': return from(PR(t.i, subst(t.t, x, s, fvs, mark)), t);
     case 'lam': case 'let': {
       const v = t.k === 'let' ? subst(t.v, x, s, fvs, mark) : null;
       let y = t.x, b = t.b;
@@ -74,7 +79,7 @@ export function subst(t, x, s, fvs, mark) {
         }
         b = subst(b, x, s, fvs, mark);
       }
-      return t.k === 'lam' ? L(y, b) : LET(y, v, b);
+      return from(t.k === 'lam' ? L(y, b) : LET(y, v, b), t);
     }
   }
 }
@@ -84,12 +89,12 @@ export const substitute = (t, x, s, mark) => subst(t, x, s, fv(s), mark);
 export function prepare(t, x, fvs, log) {
   switch (t.k) {
     case 'var': case 'const': return t;
-    case 'app': return A(prepare(t.f, x, fvs, log), prepare(t.a, x, fvs, log));
-    case 'pair': return P(prepare(t.a, x, fvs, log), prepare(t.b, x, fvs, log));
-    case 'proj': return PR(t.i, prepare(t.t, x, fvs, log));
+    case 'app': return from(A(prepare(t.f, x, fvs, log), prepare(t.a, x, fvs, log)), t);
+    case 'pair': return from(P(prepare(t.a, x, fvs, log), prepare(t.b, x, fvs, log)), t);
+    case 'proj': return from(PR(t.i, prepare(t.t, x, fvs, log)), t);
     case 'lam': case 'let': {
       const v = t.k === 'let' ? prepare(t.v, x, fvs, log) : null;
-      if (t.x === x) return t.k === 'lam' ? t : LET(t.x, v, t.b);
+      if (t.x === x) return t.k === 'lam' ? t : from(LET(t.x, v, t.b), t);
       let y = t.x, b = t.b, renamed = false;
       if (fvs.has(y) && fv(b).has(x)) {
         const y2 = fresh(y, new Set([...fvs, ...names(b), x]));
@@ -98,7 +103,7 @@ export function prepare(t, x, fvs, log) {
         y = y2; renamed = true;
       }
       b = prepare(b, x, fvs, log);
-      const n = t.k === 'lam' ? L(y, b) : LET(y, v, b);
+      const n = from(t.k === 'lam' ? L(y, b) : LET(y, v, b), t);
       if (renamed) n.mark = 'alphaB';
       return n;
     }
@@ -166,6 +171,39 @@ export function redexKind(t, env) {
   return null;
 }
 export const isEta = k => k === 'eta' || k === 'etaS';
+
+// Each rule as a schema over pattern variables, and where each variable sits in a redex.
+// `bindings` returns [{ name, rel, binder }], `rel` a path relative to the redex.
+// A binder binding names the λ/let whose bound name it is.
+export function schemaFor(t, kind) {
+  switch (kind) {
+    case 'alpha': return 'λ{x}. {t}  ≡  λ{y}. {t}[{x} := {y}]';
+    case 'beta': return '(λ{x}. {t}) {s}  ⟶  {t}[{x} := {s}]';
+    case 'zeta': return 'let {x} := {v}; {t}  ⟶  {t}[{x} := {v}]';
+    case 'delta': return '{c}  ⟶  the definition of {c}';
+    case 'iota': return recArgs(t)[2].k === 'const' ? 'Nat.rec {z} {s} 0  ⟶  {z}' : 'Nat.rec {z} {s} (succ {n})  ⟶  {s} {n} (Nat.rec {z} {s} {n})';
+    case 'proj': return t.i === 1 ? '({a}, {b}).1  ⟶  {a}' : '({a}, {b}).2  ⟶  {b}';
+    case 'eta': return 'λ{x}. {f} {x}  ⟶  {f}';
+    case 'etaS': return '({p}.1, {p}.2)  ⟶  {p}';
+  }
+}
+export function bindings(t, kind) {
+  switch (kind) {
+    case 'beta': return [{ name: 'x', rel: 'f', binder: true }, { name: 't', rel: 'fb' }, { name: 's', rel: 'a' }];
+    case 'zeta': return [{ name: 'x', rel: '', binder: true }, { name: 'v', rel: 'v' }, { name: 't', rel: 'b' }];
+    case 'delta': return [{ name: 'c', rel: '' }];
+    case 'iota': {
+      const zs = [{ name: 'z', rel: 'ffa' }, { name: 's', rel: 'fa' }];
+      return recArgs(t)[2].k === 'const' ? zs : [...zs, { name: 'n', rel: 'aa' }];
+    }
+    case 'proj': return [{ name: 'a', rel: 'ta' }, { name: 'b', rel: 'tb' }];
+    case 'eta': return [{ name: 'x', rel: '', binder: true }, { name: 'f', rel: 'bf' }];
+    case 'etaS': return [{ name: 'p', rel: 'at' }];
+  }
+  return [];
+}
+// Pattern variables in order of first appearance; a variable's slot color is its index.
+export const schemaVars = schema => [...new Set([...schema.matchAll(/\{(\w)\}/g)].map(m => m[1]))];
 
 export function contract(t, kind, env, mark) {
   let r;

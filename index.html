@@ -38,19 +38,22 @@
 
       <section id="workbench">
         <h2>Workbench</h2>
-        <p>A small colored letter marks each redex. Click it to fire that redex. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head of the term, and <b>Normalize</b> runs until no redex is left. The arcs link each variable to the binder it refers to.</p>
+        <p>Each box is one piece of syntax: a <b>λ</b> box with its binder on a tab, an application box with the function first and its arguments after it, a pair box. A variable is a tag in the color of the binder it belongs to, and the arcs above link each one to that binder.</p>
+        <p>A badge on a box’s corner marks a redex. Hover it to see the rule match: the rule’s pattern variables and the pieces of the term they stand for get the same highlighter color. Click it and each piece moves to where the result uses it. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head, and <b>Normalize</b> runs until no redex is left.</p>
         <div data-redex="workbench" data-example="beta"></div>
       </section>
 
       <section id="paths">
         <h2>Every path</h2>
         <p>A term with several redexes can reduce in several orders. The graph shows all of them at once. When two paths split, they can always be joined again (the Church–Rosser theorem), so a term has at most one normal form.</p>
+        <p>Each row is a number of steps from the start. A circle is a term that can still reduce at its head, a diamond is in weak head normal form, and a filled square is a normal form. The number beside a mark is the term’s size. Hover a mark to read the term, and pick a route to see which path a strategy takes.</p>
         <div data-redex="graph"></div>
       </section>
 
       <section id="strategies">
         <h2>Strategies</h2>
-        <p>A strategy is a rule for choosing the next redex. Normal order finds the normal form whenever one exists. Applicative order evaluates arguments first, which saves work when an argument is used many times and loops when a looping argument is never used. Lean’s <code>whnf</code> stops as soon as the head of the term is exposed.</p>
+        <p>A strategy is a rule for choosing the next redex. Normal order finds the normal form whenever one exists. Applicative order evaluates arguments first, which saves work when an argument is used many times and loops when a looping argument is never used.</p>
+        <p>Every term is a <em>head</em> applied to zero or more arguments: in <code>f a b</code> the head is <code>f</code>. A term is in <em>weak head normal form</em> when no rule can change its head: the head is a variable (<code>a ((λy. y) a)</code>), a constructor (<code>succ (…)</code>, <code>(…, …)</code>), or a λ with no arguments (<code>λx. …</code>). The arguments and the inside of the λ may still hold redexes. That is enough to answer “what shape is this term?”, which is all Lean’s <code>whnf</code> asks before it compares two heads or picks a branch of a recursor.</p>
         <div data-redex="race"></div>
       </section>
 

@@ -91,3 +91,25 @@ test('parser accepts Lean syntax', () => {
   assert.equal(text(parseProgram('Nat.rec 0 (fun k r => Nat.succ r) 3').term), 'Nat.rec 0 (λk. λr. succ r) 3');
   assert.throws(() => parseTerm('λ. x'), /variable after λ/);
 });
+
+test('provenance: β copies of the argument point back to it, and the body to the old body', async () => {
+  const { contract, bindings, schemaFor, schemaVars } = await import('../src/engine.js');
+  const t = parseTerm('(λf. f (f a)) (λy. y)');
+  const r = contract(t, 'beta', new Map());
+  assert.equal(r.from, t.f.b.uid);                 // the result root came from the body
+  assert.equal(r.f.from, t.a.uid);                 // first f became a copy of the argument
+  assert.equal(r.a.f.from, t.a.uid);               // so did the second
+  assert.deepEqual(bindings(t, 'beta').map(b => b.name), schemaVars(schemaFor(t, 'beta')));
+});
+
+test('every rule binds exactly the pattern variables its schema mentions', async () => {
+  const { bindings, schemaFor, schemaVars, redexes } = await import('../src/engine.js');
+  for (const e of EXAMPLES) {
+    const p = parseProgram(e.src);
+    for (const r of redexes(p.term, p.env)) {
+      let node = p.term; for (const c of r.path) node = node[c];
+      const vars = schemaVars(schemaFor(node, r.kind));
+      for (const b of bindings(node, r.kind)) assert.ok(vars.includes(b.name), `${e.id} ${r.kind} ${b.name}`);
+    }
+  }
+});

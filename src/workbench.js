@@ -1,29 +1,36 @@
-// The workbench: one live term. Click a rule mark to fire that redex, click a binder to α-rename it.
+// The workbench: one live term drawn as nested blocks.
+//
+// Every rule firing follows one grammar:
+//   match  hovering a redex shows its rule's schema; the schema's pattern variables and the
+//          pieces of the term they matched share a highlighter color
+//   bind   the rule card lists what each pattern variable is bound to
+//   move   on firing, each bound piece flies to every place the result uses it;
+//          pieces the result drops fade out where they stood
 import {
-  A, L, LET, V, CONSTS, KCLS, at, contract, esc, fresh, fv, isEta, key, names, normalNext,
-  prepare, redexes, replace, show, size, stripMarks, stripSub, subst, substNaive, text, whnfNext,
+  A, L, LET, V, CONSTS, KCLS, GLYPH, at, bindings, contract, esc, fresh, fv, isEta, key, names,
+  normalNext, prepare, redexes, replace, schemaFor, schemaVars, size, stripMarks, stripSub, subst,
+  substNaive, text, whnfNext,
 } from './engine.js';
-import { $$, drawArcs, fly, markFlat, motion, onScreen, wait } from './dom.js';
+import { renderBlocks } from './blocks.js';
+import { $$, drawArcs, markFlat, motion, wait } from './dom.js';
 
-const KINFO = {
-  alpha: { name: 'α-conversion', schema: 'λx. t  ≡  λy. t[x:=y]' },
-  beta: { name: 'β-reduction', schema: '(λx. t) s  ⟶  t[x:=s]' },
-  eta: { name: 'η-reduction', schema: 'λx. f x  ⟶  f' },
-  etaS: { name: 'η for structures', schema: '(p.1, p.2)  ⟶  p' },
-  delta: { name: 'δ-unfolding', schema: 'c  ⟶  definition of c' },
-  zeta: { name: 'ζ-reduction', schema: 'let x := v; t  ⟶  t[x:=v]' },
-  iota: { name: 'ι-reduction', schema: 'Nat.rec z s (succ n)  ⟶  s n (Nat.rec z s n)' },
-  proj: { name: 'projection', schema: '(a, b).1  ⟶  a' },
+const RULE_NAME = {
+  alpha: 'α-conversion', beta: 'β-reduction', eta: 'η-reduction', etaS: 'η for structures',
+  delta: 'δ-unfolding', zeta: 'ζ-reduction', iota: 'ι-reduction', proj: 'projection',
 };
-const HINT = 'Click a rule mark to fire that redex. Click a binder to rename it. <kbd>→</kbd> steps, <kbd>←</kbd> goes back.';
+const HINT = 'Hover a badge to see its rule match. Click to fire it. Click a binder to rename it. <kbd>→</kbd> steps, <kbd>←</kbd> goes back.';
 const NAMES = ['x', 'y', 'z', 'w', 'u', 'v', 'a', 'b', 'c', 'f', 'g', 'h', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't'];
+const short = (s, n = 34) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+// An animation's end, or its scheduled end, whichever comes first: a throttled or paused
+// timeline must never leave a firing half done.
+const settle = (anim, ms) => Promise.race([anim.finished.catch(() => {}), wait(ms + 60)]);
 
 export function mountWorkbench(root, session) {
   root.innerHTML = `
     <div class="rdx-notes"></div>
+    <div class="rdx-rule" aria-live="polite"></div>
     <div class="rdx-scroll"><div class="rdx-stage"><svg class="rdx-arcs" aria-hidden="true"></svg><div class="rdx-line rdx-tm"></div></div></div>
-    <div class="rdx-status" aria-live="polite"></div>
-    <div class="rdx-readout"></div>
+    <div class="rdx-status"></div>
     <div class="rdx-controls">
       <button type="button" class="rdx-btn primary" data-act="step">Step</button>
       <button type="button" class="rdx-btn" data-act="whnf">To WHNF</button>
@@ -36,7 +43,7 @@ export function mountWorkbench(root, session) {
     </div>
     <div class="rdx-capture" hidden>
       <p><b>Why α fired first.</b> Without renaming, substitution gives the term below. The dashed link is the argument’s free variable, caught by an inner binder, which changes what the term means.</p>
-      <div class="rdx-scroll"><div class="rdx-stage small arcs-on"><svg class="rdx-arcs" aria-hidden="true"></svg><div class="rdx-line rdx-tm"></div></div></div>
+      <div class="rdx-scroll"><div class="rdx-stage small"><svg class="rdx-arcs" aria-hidden="true"></svg><div class="rdx-line rdx-tm"></div></div></div>
     </div>
     <div class="rdx-defs" hidden><div class="rdx-label">Definitions <span>· δ unfolds these</span></div><div class="rdx-defs-list"></div></div>
     <details class="rdx-trace" open><summary>Trace</summary><ol></ol></details>
@@ -49,48 +56,32 @@ export function mountWorkbench(root, session) {
 
   const q = s => root.querySelector(s);
   const el = {
-    notes: q('.rdx-notes'), stage: q('.rdx-stage'), line: q('.rdx-line'), status: q('.rdx-status'), readout: q('.rdx-readout'),
+    notes: q('.rdx-notes'), rule: q('.rdx-rule'), stage: q('.rdx-stage'), line: q('.rdx-line'), status: q('.rdx-status'),
     capture: q('.rdx-capture'), capStage: q('.rdx-capture .rdx-stage'), capLine: q('.rdx-capture .rdx-line'),
     defs: q('.rdx-defs'), defsList: q('.rdx-defs-list'), trace: q('.rdx-trace ol'),
     srcBox: q('.rdx-src'), src: q('.rdx-src textarea'), err: q('.rdx-err'),
     act: name => q(`[data-act="${name}"]`),
   };
   const W = { arcs: true, db: false, hot: null, running: null, stop: false, note: '' };
+  const node = p => el.line.querySelector(`[data-path="${p}"]`);
 
   // ---------- rendering ----------
   function render() {
     const t = session.term;
-    el.line.innerHTML = show(t, { html: true, chips: true, env: session.env, db: W.db });
+    el.line.innerHTML = renderBlocks(t, { live: true, env: session.env, db: W.db });
     stripMarks(t);
-    el.stage.classList.toggle('arcs-on', W.arcs);
     drawArcs(el.stage, el.line, W.arcs);
-    W.hot = null; readout(null);
+    W.hot = null;
+    if (!session.busy) showRule(null);
     renderStatus(); renderTrace(); renderCapture(); setControls();
   }
   function renderSource() {
     el.notes.innerHTML = session.notes.map(n => `<p><span class="rdx-dash">--</span> ${esc(n)}</p>`).join('');
     el.defs.hidden = !session.env.size;
     el.defsList.innerHTML = [...session.env].map(([n, b]) =>
-      `<div class="rdx-def rdx-tm"><span class="rc rdef">${esc(n)}</span> <span class="rk">:=</span> <span data-def="${esc(n)}">${show(b, { html: true, env: session.env })}</span></div>`).join('');
+      `<div class="rdx-def rdx-tm"><span class="b b-const b-def">${esc(n)}</span><span class="rk">:=</span><span data-def="${esc(n)}">${renderBlocks(b, { env: session.env })}</span></div>`).join('');
     el.src.value = session.src;
     el.err.hidden = true;
-  }
-  function readout(rx) {
-    if (!rx) { el.readout.innerHTML = HINT; return; }
-    const k = rx.dataset.kind, info = KINFO[k];
-    el.readout.innerHTML = `${markFlat(k)} <b>${info.name}</b> <code>${esc(info.schema)}</code>`;
-  }
-  function setHot(rx) {
-    if (W.hot === rx) return;
-    if (W.hot) W.hot.classList.remove('hot');
-    W.hot = rx;
-    if (rx) rx.classList.add('hot');
-    readout(rx);
-  }
-  function setLit(id) {
-    $$('.lit', el.stage).forEach(e => e.classList.remove('lit'));
-    if (!id) return;
-    $$(`[data-id="${id}"], [data-bid="${id}"] > .rv, .rb[data-anchor="${id}"]`, el.stage).forEach(e => e.classList.add('lit'));
   }
   function renderStatus() {
     const t = session.term, rs = redexes(t, session.env), main = rs.filter(r => !isEta(r.kind));
@@ -103,7 +94,7 @@ export function mountWorkbench(root, session) {
     const marks = Object.entries(tally).map(([k, n]) => `<span class="rdx-tally">${markFlat(k)}${n > 1 ? '×' + n : ''}</span>`).join('');
     const last = session.hist.length - 1;
     el.status.innerHTML = `${s}${marks ? `<span class="rdx-tallies">${marks}</span>` : ''}`
-      + `<span class="rdx-stepno">step ${session.idx}${last > session.idx ? ' of ' + last : ''}</span>`
+      + `<span class="rdx-stepno">step ${session.idx}${last > session.idx ? ' of ' + last : ''} · size ${size(t)}</span>`
       + (W.note ? `<span class="rdx-note">${esc(W.note)}</span>` : '');
   }
   function renderTrace() {
@@ -118,7 +109,7 @@ export function mountWorkbench(root, session) {
   function renderCapture() {
     el.capture.hidden = !session.capture;
     if (!session.capture) return;
-    el.capLine.innerHTML = show(session.capture, { html: true, env: session.env });
+    el.capLine.innerHTML = renderBlocks(session.capture, { env: session.env });
     drawArcs(el.capStage, el.capLine, true);
   }
   function setControls() {
@@ -133,51 +124,144 @@ export function mountWorkbench(root, session) {
     el.act('reset').disabled = busy || (session.idx === 0 && session.hist.length === 1);
   }
 
+  // ---------- match: the rule card and the highlighted pieces ----------
+  // Returns the pieces of the redex at `path`: [{ name, slot, el, uid }].
+  function match(path, kind) {
+    const redex = at(session.term, path), schema = schemaFor(redex, kind), vars = schemaVars(schema);
+    const pieces = [];
+    for (const b of bindings(redex, kind)) {
+      const slot = vars.indexOf(b.name) + 1, owner = node(path + b.rel);
+      if (!owner) continue;
+      if (b.binder) {
+        const tab = owner.querySelector(':scope > .bt > .rb') || owner.querySelector(':scope > .bt > .rk');
+        if (tab) pieces.push({ name: b.name, slot, el: tab, binder: owner.dataset.binder });
+      } else {
+        pieces.push({ name: b.name, slot, el: owner, uid: owner.dataset.uid, text: text(at(redex, b.rel)) });
+      }
+    }
+    if (kind === 'delta') {
+      const body = el.defsList.querySelector(`[data-def="${CSS.escape(redex.n)}"] > .b`);
+      if (body) pieces.push({ name: 'c', slot: 1, el: body, uid: body.dataset.uid, external: true });
+    }
+    return { redex, schema, vars, pieces };
+  }
+  function paint(m, strength) {
+    unpaint();
+    for (const pc of m.pieces) {
+      if (!pc.slot) continue;
+      pc.el.classList.add('mv', `s${pc.slot}`, strength);
+      if (pc.binder) $$(`[data-bid="${pc.binder}"]`, el.line).forEach(v => v.classList.add('mv', `s${pc.slot}`, strength));
+    }
+  }
+  function unpaint() {
+    $$('.mv', root).forEach(e => e.classList.remove('mv', 's1', 's2', 's3', 's4', 'soft', 'hard'));
+  }
+  function showRule(rx, m) {
+    if (!rx) { el.rule.innerHTML = `<p class="rdx-hint">${HINT}</p>`; return; }
+    const kind = rx.dataset.kind;
+    const schema = m.schema.replace(/\{(\w)\}/g, (_, v) => `<span class="mv s${m.vars.indexOf(v) + 1}">${v}</span>`);
+    const binds = m.pieces.filter(pc => pc.slot && !pc.external).map(pc =>
+      `<span class="rdx-bind"><span class="mv s${pc.slot}">${pc.name}</span> = <code>${esc(short(pc.binder ? pc.el.textContent : pc.text))}</code></span>`).join('');
+    el.rule.innerHTML = `<p class="rdx-schema"><span class="rm flat k-${KCLS(kind)}">${GLYPH[kind]}</span><b>${RULE_NAME[kind]}</b><code>${schema}</code></p><p class="rdx-binds">${binds}</p>`;
+  }
+  function setHot(rx) {
+    if (W.hot === rx) return;
+    if (W.hot) W.hot.classList.remove('hot');
+    W.hot = rx;
+    if (!rx) { unpaint(); showRule(null); return; }
+    rx.classList.add('hot');
+    const m = match(rx.dataset.path, rx.dataset.kind);
+    paint(m, 'soft'); showRule(rx, m);
+  }
+  function setLit(id) {
+    $$('.lit', el.stage).forEach(e => e.classList.remove('lit'));
+    if (!id) return;
+    $$(`[data-id="${id}"], [data-bid="${id}"], .rb[data-anchor="${id}"]`, el.stage).forEach(e => e.classList.add('lit'));
+  }
+
+  // ---------- move: fly each bound piece to where the result uses it ----------
+  function snapshot(m) {
+    return m.pieces.map(pc => ({ ...pc, rect: pc.el.getBoundingClientRect(), ghost: pc.el.cloneNode(true), font: getComputedStyle(pc.el).fontSize }));
+  }
+  function ghostAt(pc) {
+    const w = document.createElement('div');
+    w.className = 'redex rdx-flyer rdx-tm';
+    w.style.cssText = `left:${pc.rect.left}px;top:${pc.rect.top}px;width:${pc.rect.width}px;height:${pc.rect.height}px;font-size:${pc.font}`;
+    pc.ghost.classList.remove('hot', 'soft');
+    w.appendChild(pc.ghost.cloneNode(true));
+    document.body.appendChild(w);
+    return w;
+  }
+  async function move(snap, path, speed) {
+    const result = node(path);
+    if (!result) return;
+    result.classList.add('emerging');
+    const flights = snap.map((pc, i) => {
+      const hits = !pc.uid ? [] : [result, ...result.querySelectorAll('[data-uid], [data-from]')]
+        .filter(e => e.dataset.uid === pc.uid || e.dataset.from === pc.uid);
+      const delay = (i * 150) / speed;
+      if (!hits.length) {
+        if (pc.external) return null;
+        const g = ghostAt(pc), ms = 480 / speed;
+        return settle(g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.7)' }],
+          { duration: ms, delay, easing: 'ease-in', fill: 'both' }), delay + ms).then(() => g.remove());
+      }
+      return Promise.all(hits.map((tg, j) => {
+        tg.classList.add('arriving');
+        const tr = tg.getBoundingClientRect(), g = ghostAt(pc);
+        const dx = tr.left + tr.width / 2 - (pc.rect.left + pc.rect.width / 2);
+        const dy = tr.top + tr.height / 2 - (pc.rect.top + pc.rect.height / 2);
+        const sc = Math.max(0.3, Math.min(1.6, tr.width / Math.max(1, pc.rect.width)));
+        const lift = -Math.min(64, 20 + Math.abs(dx) * 0.12);
+        const ms = 720 / speed, lag = delay + (j * 90) / speed;
+        return settle(g.animate([
+          { transform: 'translate(0,0) scale(1)', opacity: 0.97 },
+          { transform: `translate(${dx / 2}px, ${dy / 2 + lift}px) scale(${(1 + sc) / 2})`, opacity: 0.97, offset: 0.5 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 0.35 },
+        ], { duration: ms, delay: lag, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'both' }), lag + ms).then(done);
+        function done() {
+          g.remove();
+          tg.classList.remove('arriving');
+          if (pc.slot) tg.classList.add('landed', `s${pc.slot}`);
+        }
+      }));
+    });
+    await Promise.all(flights);
+  }
+
   // ---------- firing ----------
   async function fireAt(path, kind, speed = 1) {
-    const t = session.term, node = at(t, path);
+    const t = session.term, redex = at(t, path);
     if (kind === 'beta' || kind === 'zeta') {
-      const lam = kind === 'beta' ? node.f : node, arg = kind === 'beta' ? node.a : node.v;
+      const lam = kind === 'beta' ? redex.f : redex, arg = kind === 'beta' ? redex.a : redex.v;
       const log = [], body = prepare(lam.b, lam.x, fv(arg), log);
       if (log.length) {
         session.capture = substNaive(lam.b, lam.x, arg);
-        const renamed = kind === 'beta' ? A(L(lam.x, body), arg) : LET(node.x, node.v, body);
+        const renamed = kind === 'beta' ? A(L(lam.x, body), arg) : LET(redex.x, redex.v, body);
         const olds = log.map(l => l[0]).join(', ');
         session.push({ term: replace(t, path, renamed), kind: 'alpha', note: `${log.map(([a, b]) => `${a} → ${b}`).join(', ')}, so the argument’s free ${olds} stays free` });
         if (motion()) await wait(1000 / speed);
       }
     }
-    await animate(path, kind, speed);
-    const now = session.term;
-    session.push({ term: replace(now, path, contract(at(now, path), kind, session.env, 'fl-' + KCLS(kind))), kind });
-  }
-
-  async function animate(path, kind, speed) {
-    if (!motion()) return;
-    const node = el.line.querySelector(`[data-path="${path}"]`);
-    if (!node) return;
-    setHot(null);
-    node.classList.add('firing');
-    if (kind === 'beta' || kind === 'zeta') {
-      const src = el.line.querySelector(`[data-path="${path + (kind === 'beta' ? 'a' : 'v')}"]`);
-      const binder = el.line.querySelector(`[data-path="${kind === 'beta' ? path + 'f' : path}"]`);
-      const occ = binder ? $$(`[data-bid="${binder.dataset.binder}"]`, el.line) : [];
-      if (binder) $$(':scope > .rk, :scope > .rb', binder).forEach(e => e.classList.add('consumed'));
-      occ.forEach(o => o.style.setProperty('--rc', `var(--rdx-${kind})`));
-      await fly(src, occ, speed);
-    } else if (kind === 'delta') {
-      const src = el.defsList.querySelector(`[data-def="${CSS.escape(at(session.term, path).n)}"]`);
-      if (src && onScreen(src)) { node.style.setProperty('--rc', 'var(--rdx-delta)'); await fly(src, [node], speed, true); }
-      else await wait(340 / speed);
-    } else {
-      await wait(360 / speed);
+    let snap = [];
+    if (motion()) {
+      const rx = node(path);
+      const m = match(path, kind);
+      W.hot = null;
+      rx?.classList.add('firing');
+      showRule(rx, m); paint(m, 'hard');
+      await wait(560 / speed);
+      snap = snapshot(m);
     }
+    const now = session.term;
+    session.push({ term: replace(now, path, contract(at(now, path), kind, session.env)), kind });
+    if (motion()) await move(snap, path, speed);
   }
 
   async function fireOnce(path, kind) {
     if (session.busy) return;
     session.busy = true; W.note = ''; setControls();
-    try { await fireAt(path, kind, 1); } finally { session.busy = false; setControls(); }
+    try { await fireAt(path, kind, 1); } finally { session.busy = false; unpaint(); showRule(null); setControls(); }
   }
 
   async function run(mode) {
@@ -190,7 +274,7 @@ export function mountWorkbench(root, session) {
         const t = session.term;
         const r = mode === 'whnf' ? whnfNext(t, session.env) : normalNext(t, session.env);
         if (!r) break;
-        await fireAt(r.path, r.kind, mode === 'step' ? 1 : n < 4 ? 1.4 : n < 16 ? 2.4 : 5);
+        await fireAt(r.path, r.kind, mode === 'step' ? 1 : n < 3 ? 1.3 : n < 12 ? 2.2 : 4.5);
         n++;
         if (mode === 'step') break;
         const k = key(session.term);
@@ -201,7 +285,7 @@ export function mountWorkbench(root, session) {
       }
     } finally {
       session.busy = false; W.running = null; W.note = msg;
-      renderStatus(); setControls();
+      unpaint(); showRule(null); renderStatus(); setControls();
     }
   }
 
@@ -232,12 +316,12 @@ export function mountWorkbench(root, session) {
     const b = e.target.closest('[data-bid], .rb');
     setLit(b ? (b.dataset.bid || b.dataset.anchor) : null);
   });
-  el.line.addEventListener('mouseleave', () => { setHot(null); setLit(null); });
+  el.line.addEventListener('mouseleave', () => { if (!session.busy) { setHot(null); setLit(null); } });
   el.line.addEventListener('focusin', e => { const rx = e.target.closest('.rr'); if (rx && !session.busy) setHot(rx); });
   el.line.addEventListener('click', e => {
     if (session.busy) return;
     const bn = e.target.closest('.rb');
-    if (bn) { rename(bn.dataset.path); return; }
+    if (bn && bn.tagName === 'BUTTON') { rename(bn.dataset.path); return; }
     const rx = e.target.closest('.rr');
     if (rx) fireOnce(rx.dataset.path, rx.dataset.kind);
   });

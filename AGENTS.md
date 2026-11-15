@@ -18,7 +18,12 @@ for the file layout and how a page embeds the widgets.
   gray rules, square corners, Source Sans 3 and Source Code Pro, keywords bold, bound variables italic.
 - Strategies never perform η, as in Lean, where η only appears when comparing terms. η fires only
   when clicked.
-- Every animation checks `motion()` and the CSS honors `prefers-reduced-motion`.
+- One firing grammar for every rule: match, bind, move (README "Core model"). A new rule needs a
+  schema and `bindings()` in the engine, and every node it builds from an old one needs `from`;
+  the workbench then animates it with no rule-specific code.
+- Keep the three color channels apart: rule ink, binder hue, highlighter.
+- Every animation checks `motion()`, the CSS honors `prefers-reduced-motion`, and no firing waits on
+  an animation without a timeout (`settle`).
 - Examples are self-contained: each carries the `def`s it uses.
 
 ## Check
