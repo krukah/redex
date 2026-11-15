@@ -213,20 +213,59 @@ export function mountWorkbench(root, session) {
         const dy = tr.top + tr.height / 2 - (pc.rect.top + pc.rect.height / 2);
         const sc = Math.max(0.3, Math.min(1.6, tr.width / Math.max(1, pc.rect.width)));
         const lift = -Math.min(64, 20 + Math.abs(dx) * 0.12);
-        const ms = 720 / speed, lag = delay + (j * 90) / speed;
-        return settle(g.animate([
+        const ms = 760 / speed, lag = delay + (j * 90) / speed, end = `translate(${dx}px, ${dy}px) scale(${sc})`;
+        // The ghost reaches the target at 75%, then dissolves while the real piece fades in under it.
+        const flight = settle(g.animate([
           { transform: 'translate(0,0) scale(1)', opacity: 0.97 },
-          { transform: `translate(${dx / 2}px, ${dy / 2 + lift}px) scale(${(1 + sc) / 2})`, opacity: 0.97, offset: 0.5 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: 0.35 },
-        ], { duration: ms, delay: lag, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'both' }), lag + ms).then(done);
-        function done() {
-          g.remove();
+          { transform: `translate(${dx / 2}px, ${dy / 2 + lift}px) scale(${(1 + sc) / 2})`, opacity: 0.97, offset: 0.4 },
+          { transform: end, opacity: 0.97, offset: 0.75 },
+          { transform: end, opacity: 0 },
+        ], { duration: ms, delay: lag, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'both' }), lag + ms).then(() => g.remove());
+        const reveal = wait(lag + ms * 0.72).then(() => {
           tg.classList.remove('arriving');
           if (pc.slot) tg.classList.add('landed', `s${pc.slot}`);
-        }
+          return settle(tg.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms * 0.3, easing: 'ease-out' }), ms * 0.3);
+        });
+        return Promise.all([flight, reveal]);
       }));
     });
     await Promise.all(flights);
+  }
+
+  // The rest of the term glides from its old layout to the new one instead of snapping:
+  // boxes that enclose the redex animate their size, nodes beside it slide, the stage resizes.
+  function layout() {
+    const rects = new Map([['stage', el.stage.getBoundingClientRect()]]);
+    el.line.querySelectorAll('[data-uid]').forEach(e => rects.set(e.dataset.uid, e.getBoundingClientRect()));
+    return rects;
+  }
+  function glide(before, path, speed) {
+    const result = node(path), ms = 560 / speed, ease = 'cubic-bezier(.3,.1,.2,1)', anims = [];
+    if (!result) return null;
+    const size = (e, old) => {
+      const now = e.getBoundingClientRect();
+      if (Math.abs(now.width - old.width) > 0.5 || Math.abs(now.height - old.height) > 0.5) {
+        anims.push(e.animate([{ width: `${old.width}px`, height: `${old.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }], { duration: ms, easing: ease }));
+      }
+    };
+    const visit = parent => {
+      for (const c of parent.children) {
+        if (c === result) continue;
+        if (c.dataset.uid === undefined) { visit(c); continue; }
+        const old = before.get(c.dataset.uid);
+        if (c.contains(result)) { if (old) size(c, old); visit(c); continue; }
+        if (!old) { anims.push(c.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: ease })); continue; }
+        const now = c.getBoundingClientRect(), dx = old.left - now.left, dy = old.top - now.top;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) anims.push(c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: ms, easing: ease }));
+      }
+    };
+    visit(el.line);
+    size(el.stage, before.get('stage'));
+    el.stage.classList.add('moving');
+    return Promise.all(anims.map(a => settle(a, ms))).then(() => {
+      el.stage.classList.remove('moving');
+      drawArcs(el.stage, el.line, W.arcs);
+    });
   }
 
   // ---------- firing ----------
@@ -243,7 +282,7 @@ export function mountWorkbench(root, session) {
         if (motion()) await wait(1000 / speed);
       }
     }
-    let snap = [];
+    let snap = [], before = null;
     if (motion()) {
       const rx = node(path);
       const m = match(path, kind);
@@ -252,10 +291,11 @@ export function mountWorkbench(root, session) {
       showRule(rx, m); paint(m, 'hard');
       await wait(560 / speed);
       snap = snapshot(m);
+      before = layout();
     }
     const now = session.term;
     session.push({ term: replace(now, path, contract(at(now, path), kind, session.env)), kind });
-    if (motion()) await move(snap, path, speed);
+    if (motion()) await Promise.all([move(snap, path, speed), glide(before, path, speed)]);
   }
 
   async function fireOnce(path, kind) {

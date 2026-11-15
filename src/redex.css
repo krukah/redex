@@ -175,7 +175,7 @@
 .redex .rdx-err { margin-top: .5rem; color: var(--rdx-danger); }
 
 /* ---------- rule table ---------- */
-.redex .rdx-tablewrap { overflow-x: auto; }
+.redex .rdx-tablewrap { overflow: visible; }
 .redex .rdx-rules { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .redex .rdx-rules th { text-align: left; font-weight: 700; padding: .35rem .5rem; border-bottom: 1px solid var(--rdx-ink); }
 .redex .rdx-rules td { padding: .4rem .5rem; border-bottom: 1px solid var(--rdx-line); vertical-align: baseline; }
@@ -185,7 +185,7 @@
 .redex .rdx-rules tr.on td:first-child { box-shadow: inset 3px 0 0 var(--rc); }
 .redex .rdx-rules .rdx-g { width: 2.2rem; text-align: center; font: 700 1.3rem/1 var(--rdx-code-font); color: var(--rc); }
 .redex .rdx-rules .rdx-sub { display: block; color: var(--rdx-muted); font-size: .9rem; }
-.redex .rdx-rules code { white-space: nowrap; }
+.redex .rdx-rules code { white-space: normal; overflow-wrap: anywhere; }
 .redex .rdx-rules td:last-child { text-align: right; }
 .redex .rdx-more { font-size: .95rem; }
 
@@ -245,7 +245,7 @@
 .redex .rdx-lane header p { font-size: .85rem; color: var(--rdx-muted); }
 .redex .rdx-count { font: 700 1.3rem/1 var(--rdx-text-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .redex .rdx-count small { font-size: .8rem; font-weight: 400; color: var(--rdx-muted); margin-left: .25rem; }
-.redex .rdx-lane ol { list-style: none; margin: 0; padding: .4rem; max-height: 18rem; overflow: auto; display: grid; gap: .1rem; align-content: start; background: var(--rdx-sunk); }
+.redex .rdx-lane ol { list-style: none; margin: 0; padding: .4rem; height: 13.5rem; overflow: auto; display: grid; gap: .1rem; align-content: start; background: var(--rdx-sunk); }
 .redex .rdx-lane li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem; align-items: baseline; padding: .1rem .3rem; }
 .redex .rdx-lane li code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .82rem; }
 .redex .rdx-lane li.rdx-end { grid-template-columns: 1fr; font-size: .85rem; font-weight: 700; padding: .3rem .4rem; margin-top: .2rem; }
@@ -263,4 +263,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .redex *, .redex *::before, .redex *::after { animation: none !important; transition: none !important; }
+}
+
+/* binding links step aside while the term rearranges, and return once it settles */
+.redex .rdx-arcs { transition: opacity .25s; }
+.redex .rdx-stage.moving .rdx-arcs { opacity: 0; transition: none; }
+@media (max-width: 560px) {
+  .redex .rdx-rules td:last-child, .redex .rdx-rules th:last-child { display: none; }
 }
