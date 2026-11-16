@@ -23,6 +23,8 @@ const NAMES = ['x', 'y', 'z', 'w', 'u', 'v', 'a', 'b', 'c', 'f', 'g', 'h', 'k', 
 const short = (s, n = 34) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 // An animation's end, or its scheduled end, whichever comes first: a throttled or paused
 // timeline must never leave a firing half done.
+// One duration and one easing for every moving part of a firing.
+const FLIGHT = 620, EASE = 'cubic-bezier(.45, 0, .2, 1)';
 const settle = (anim, ms) => Promise.race([anim.finished.catch(() => {}), wait(ms + 60)]);
 
 export function mountWorkbench(root, session) {
@@ -192,19 +194,22 @@ export function mountWorkbench(root, session) {
     document.body.appendChild(w);
     return w;
   }
+  // Every piece travels in a straight line, with one easing curve shared by the context glide,
+  // so the whole step reads as one motion. Terms sit on one line, so most paths are horizontal.
   async function move(snap, path, speed) {
     const result = node(path);
     if (!result) return;
     result.classList.add('emerging');
+    const ms = FLIGHT / speed;
     const flights = snap.map((pc, i) => {
       const hits = !pc.uid ? [] : [result, ...result.querySelectorAll('[data-uid], [data-from]')]
         .filter(e => e.dataset.uid === pc.uid || e.dataset.from === pc.uid);
-      const delay = (i * 150) / speed;
+      const delay = (i * 50) / speed;
       if (!hits.length) {
         if (pc.external) return null;
-        const g = ghostAt(pc), ms = 480 / speed;
-        return settle(g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.7)' }],
-          { duration: ms, delay, easing: 'ease-in', fill: 'both' }), delay + ms).then(() => g.remove());
+        const g = ghostAt(pc), out = ms * 0.6;
+        return settle(g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.85)' }],
+          { duration: out, delay, easing: 'ease-out', fill: 'both' }), delay + out).then(() => g.remove());
       }
       return Promise.all(hits.map((tg, j) => {
         tg.classList.add('arriving');
@@ -212,21 +217,15 @@ export function mountWorkbench(root, session) {
         const dx = tr.left + tr.width / 2 - (pc.rect.left + pc.rect.width / 2);
         const dy = tr.top + tr.height / 2 - (pc.rect.top + pc.rect.height / 2);
         const sc = Math.max(0.3, Math.min(1.6, tr.width / Math.max(1, pc.rect.width)));
-        const lift = -Math.min(64, 20 + Math.abs(dx) * 0.12);
-        const ms = 760 / speed, lag = delay + (j * 90) / speed, end = `translate(${dx}px, ${dy}px) scale(${sc})`;
-        // The ghost reaches the target at 75%, then dissolves while the real piece fades in under it.
-        const flight = settle(g.animate([
-          { transform: 'translate(0,0) scale(1)', opacity: 0.97 },
-          { transform: `translate(${dx / 2}px, ${dy / 2 + lift}px) scale(${(1 + sc) / 2})`, opacity: 0.97, offset: 0.4 },
-          { transform: end, opacity: 0.97, offset: 0.75 },
-          { transform: end, opacity: 0 },
-        ], { duration: ms, delay: lag, easing: 'cubic-bezier(.45,.05,.3,1)', fill: 'both' }), lag + ms).then(() => g.remove());
-        const reveal = wait(lag + ms * 0.72).then(() => {
+        const lag = delay + (j * 40) / speed, fade = Math.min(220, ms * 0.35);
+        const flight = settle(g.animate([{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px) scale(${sc})` }],
+          { duration: ms, delay: lag, easing: EASE, fill: 'both' }), lag + ms);
+        // On arrival the real piece is already in place under the ghost; the ghost then dissolves.
+        return flight.then(() => {
           tg.classList.remove('arriving');
           if (pc.slot) tg.classList.add('landed', `s${pc.slot}`);
-          return settle(tg.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms * 0.3, easing: 'ease-out' }), ms * 0.3);
-        });
-        return Promise.all([flight, reveal]);
+          return settle(g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fade, easing: 'linear', fill: 'both' }), fade);
+        }).then(() => g.remove());
       }));
     });
     await Promise.all(flights);
@@ -240,7 +239,7 @@ export function mountWorkbench(root, session) {
     return rects;
   }
   function glide(before, path, speed) {
-    const result = node(path), ms = 560 / speed, ease = 'cubic-bezier(.3,.1,.2,1)', anims = [];
+    const result = node(path), ms = FLIGHT / speed, ease = EASE, anims = [];
     if (!result) return null;
     const size = (e, old) => {
       const now = e.getBoundingClientRect();

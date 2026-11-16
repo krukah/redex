@@ -21,6 +21,8 @@ for the file layout and how a page embeds the widgets.
 - One firing grammar for every rule: match, bind, move (README "Core model"). A new rule needs a
   schema and `bindings()` in the engine, and every node it builds from an old one needs `from`;
   the workbench then animates it with no rule-specific code.
+- Firing motion is direct: pieces fly in straight lines (no arcs), and flights and the context glide
+  share one duration and easing (`FLIGHT`, `EASE` in `workbench.js`).
 - Keep the three color channels apart: rule ink, binder hue, highlighter.
 - Every animation checks `motion()`, the CSS honors `prefers-reduced-motion`, and no firing waits on
   an animation without a timeout (`settle`).

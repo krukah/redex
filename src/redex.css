@@ -115,9 +115,9 @@
 .redex .rdx-rule .mv { font-style: italic; font-weight: 700; padding: 0 .28em; border-radius: 2px; background: var(--slot); box-shadow: inset 0 -1.5px 0 var(--slot-edge); }
 
 /* move: pieces in flight, then landing */
-.redex.rdx-flyer { position: fixed; z-index: 60; margin: 0; display: flex; align-items: center; pointer-events: none; transform-origin: 50% 50%; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .2)); }
+.redex.rdx-flyer { position: fixed; z-index: 60; margin: 0; display: flex; align-items: center; pointer-events: none; transform-origin: 50% 50%; will-change: transform, opacity; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .14)); }
 .redex .arriving { visibility: hidden; }
-.redex .emerging { animation: rdx-emerge .7s ease-out both; }
+.redex .emerging { animation: rdx-emerge .62s cubic-bezier(.45, 0, .2, 1) both; }
 @keyframes rdx-emerge { from { opacity: .1; } }
 .redex .landed { animation: rdx-land 1.4s ease-out both; }
 @keyframes rdx-land { 0% { background: var(--slot); box-shadow: 0 0 0 2px var(--slot-edge); } 100% { box-shadow: 0 0 0 0 transparent; } }
