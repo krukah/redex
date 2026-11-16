@@ -14,16 +14,6 @@
 <body>
   <header class="site"><a href="#top">Redex Workbench</a></header>
 
-  <nav class="toc" aria-label="Contents">
-    <div class="toc-title">Contents</div>
-    <ol>
-      <li><a href="#workbench"><span>1.</span>Workbench</a></li>
-      <li><a href="#paths"><span>2.</span>Every path</a></li>
-      <li><a href="#strategies"><span>3.</span>Strategies</a></li>
-      <li><a href="#lean"><span>4.</span>In Lean 4</a></li>
-    </ol>
-  </nav>
-
   <main id="top">
     <div class="content">
       <h1>Redex Workbench</h1>
@@ -34,10 +24,8 @@
         <p>A <em>redex</em> is a part of a term that a rule can rewrite. Pick a rule or an example to load it into the workbench. Each example’s thumbnail is its whole reduction graph in miniature (section 2).</p>
         <p>Each box is one piece of syntax: a <b>λ</b> box with its binder on a tab, an application box with the function first and its arguments after it, a pair box. A variable is a tag in the color of the binder it belongs to, and the arcs above link each one to that binder.</p>
         <p>A badge on a box’s corner marks a redex. Hover it to see the rule match: the rule’s pattern variables and the pieces of the term they stand for get the same highlighter color. Click it and each piece moves to where the result uses it. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head, and <b>Normalize</b> runs until no redex is left.</p>
-        <div class="bench">
-          <div data-redex="rules"></div>
-          <div data-redex="workbench" data-example="beta"></div>
-        </div>
+        <div data-redex="rules"></div>
+        <div data-redex="workbench" data-example="beta"></div>
       </section>
 
       <section id="paths">
@@ -84,14 +72,6 @@
     import { mountAll } from './src/redex.js';
     mountAll();
 
-    // Mark the section in view in the table of contents.
-    const links = [...document.querySelectorAll('nav.toc a')];
-    const spy = new IntersectionObserver(entries => {
-      for (const e of entries) if (e.isIntersecting) {
-        links.forEach(a => a.classList.toggle('current', a.hash === '#' + e.target.id));
-      }
-    }, { rootMargin: '-45% 0px -50% 0px' });
-    document.querySelectorAll('main section[id]').forEach(s => spy.observe(s));
   </script>
 </body>
 </html>

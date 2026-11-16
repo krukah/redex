@@ -16,10 +16,10 @@ npm test        # engine tests, node:test
 | `src/blocks.js` | The nested-block view of a term: one element per node, carrying its path and provenance. |
 | `src/examples.js` | Example programs. Each carries its own `def`s; `--` lines become the caption. |
 | `src/session.js` | Shared state (program, history). Widgets talk to each other only through it. |
-| `src/rules.js` `workbench.js` `graph.js` `race.js` | One widget each: `mountX(root, session)`. The rules widget is a rail of rules plus example tiles, each tile a thumbnail of its reduction graph. |
+| `src/rules.js` `workbench.js` `graph.js` `race.js` | One widget each: `mountX(root, session)`. The rules widget is a grid of rules plus example tiles, each tile a thumbnail of its reduction graph. |
 | `src/redex.js` | `mountAll()`: mounts every `[data-redex]` element on the page with one shared session. |
 | `src/redex.css` | Widget styles, all scoped under `.redex`, all colors and fonts from `--rdx-*` tokens. |
-| `index.html`, `site.css` | The standalone page, styled after the Lean documentation (Verso). |
+| `index.html`, `site.css` | The standalone page, styled after the Lean documentation (Verso), without its sidebar. |
 | `scripts/bundle.mjs` | Inlines the page, CSS and modules into one file for a claude.ai artifact preview. |
 | `test/engine.test.js` | Normal forms, strategy step counts, capture, confluence, parser, provenance, rule bindings. |
 
@@ -43,10 +43,8 @@ Widgets are independent `<div>`s, so prose can sit between them:
 <link rel="stylesheet" href="/assets/redex/redex.css">
 
 <p>…</p>
-<div class="bench">
-  <div data-redex="rules"></div>
-  <div data-redex="workbench" data-example="beta"></div>
-</div>
+<div data-redex="rules"></div>
+<div data-redex="workbench" data-example="beta"></div>
 <div data-redex="graph"></div>
 <div data-redex="race"></div>
 
@@ -55,9 +53,6 @@ Widgets are independent `<div>`s, so prose can sit between them:
   mountAll();
 </script>
 ```
-
-`.bench` is page layout, not widget CSS: copy its rules from `site.css`. It puts the rules rail beside
-the workbench, widens past the text column, and stacks below 62rem of page width.
 
 For the Jekyll site, copy `src/` to `assets/redex/` and put the block above in a post; kramdown
 passes raw HTML blocks through. Two things to handle there:
