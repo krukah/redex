@@ -170,24 +170,22 @@
 .redex .rdx-err { margin-top: .5rem; color: var(--rdx-danger); }
 
 /* ---------- rule rail and example tiles ---------- */
-.redex .rdx-rail { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); column-gap: 1.5rem; border-top: 1px solid var(--rdx-ink); }
-.redex .rdx-rail > li { display: grid; }
-.redex .rdx-ri { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-content: start; column-gap: .3rem; width: 100%; padding: .38rem .5rem .42rem 0; border-bottom: 1px solid var(--rdx-line); cursor: pointer; }
-.redex .rdx-ri:hover { background: var(--rdx-hover); }
-.redex .rdx-ri:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: -2px; }
-.redex .rdx-ri.on { background: color-mix(in srgb, var(--rc) 8%, transparent); box-shadow: inset 3px 0 0 var(--rc); }
-.redex .rdx-ri .rdx-g { grid-row: span 2; text-align: center; font: 700 1.3rem/1.15 var(--rdx-code-font); color: var(--rc); }
-.redex .rdx-ri .rdx-rn { font-size: .95rem; line-height: 1.3; }
-.redex .rdx-ri .rdx-sub { color: var(--rdx-muted); }
-.redex .rdx-ri code { font-size: .78rem; color: var(--rdx-muted); overflow-wrap: anywhere; }
-.redex .rdx-ri.on code { color: var(--rdx-ink); }
-.redex .rdx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr)); gap: .5rem; }
-.redex .rdx-tile { all: unset; box-sizing: border-box; display: grid; align-content: start; gap: .1rem; padding: .35rem .35rem .4rem; border: 1px solid var(--rdx-line); background: var(--rdx-bg); cursor: pointer; }
+/* One grid for both rows, so rule i sits above example i. Each tile is a subgrid spanning one row
+   per part (face, name, details), so the parts line up across a row of tiles too. */
+.redex .rdx-deckwrap { container-type: inline-size; }
+.redex .rdx-deck { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); column-gap: .5rem; }
+.redex .rdx-deck > .rdx-label { grid-column: 1 / -1; margin: 1rem 0 .4rem; }
+.redex .rdx-deck > .rdx-label:first-child { margin-top: 0; }
+@container (max-width: 38rem) { .redex .rdx-deck { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: .5rem; } }
+.redex .rdx-tile { all: unset; box-sizing: border-box; display: grid; grid-template-rows: subgrid; row-gap: .15rem; padding: .35rem .35rem .45rem; border: 1px solid var(--rdx-line); background: var(--rdx-bg); cursor: pointer; }
 .redex .rdx-tile:hover { border-color: var(--rdx-node); }
 .redex .rdx-tile:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: 1px; }
-.redex .rdx-tile.on { border-color: var(--rdx-accent); box-shadow: inset 0 0 0 1px var(--rdx-accent); }
+.redex .rdx-tile.on { border-color: var(--rc, var(--rdx-accent)); box-shadow: inset 0 0 0 1px var(--rc, var(--rdx-accent)); }
 .redex .rdx-tile b { font-size: .88rem; line-height: 1.25; margin-top: .2rem; }
 .redex .rdx-tile .rdx-sub { font-size: .76rem; line-height: 1.25; color: var(--rdx-muted); }
+.redex .rdx-tile code { font-size: .72rem; line-height: 1.3; color: var(--rdx-muted); overflow-wrap: anywhere; white-space: normal; }
+.redex .rdx-tile.on code { color: var(--rdx-ink); }
+.redex .rdx-face { display: grid; place-items: center; aspect-ratio: 120 / 46; background: var(--rdx-sunk); font: 700 1.5rem/1 var(--rdx-code-font); color: var(--rc); }
 .redex .rdx-nfmark { display: inline-block; width: .55em; height: .55em; background: var(--rdx-ink); vertical-align: .05em; }
 .redex .rdx-thumb { display: block; width: 100%; height: auto; background: var(--rdx-sunk); }
 .redex .rdx-thumb .m { stroke-width: 1; }

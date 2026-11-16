@@ -1,4 +1,7 @@
-// The rule rail and the example tiles. Clicking either loads its example into the session.
+// The deck: one tile per rule and one per example, on a shared column grid so the two rows line
+// up. Every tile has the same parts: a face, a name, then its details, each part on its own row of
+// the grid so the parts line up across a row of tiles. Clicking a
+// tile loads its example into the session.
 //
 // Each tile carries a thumbnail of the example's reduction graph in the graph widget's grammar
 // (○ reducible, ◇ weak head normal form, ■ normal form, edges in rule ink, ring on the start),
@@ -74,23 +77,23 @@ function thumb(ex) {
   return { svg, fate, caption: notes[0] || '' };
 }
 
+const tile = ({ id, cls = '', title, face, name, details }) =>
+  `<button type="button" class="rdx-tile ${cls}" style="grid-row: span ${2 + details.length}" data-ex="${id}" aria-pressed="false" title="${esc(title)}">`
+  + `${face}<b>${name}</b>${details.join('')}</button>`;
+
 export function mountRules(root, session) {
   root.innerHTML = `
-    <div class="rdx-label">Rules</div>
-    <ol class="rdx-rail">${RULES.map(r => `
-      <li><button type="button" class="rdx-ri k-${r.k}" data-ex="${r.id}" aria-pressed="false">
-        <span class="rdx-g" aria-hidden="true">${GLYPH[r.k]}</span>
-        <span class="rdx-rn"><b>${r.name}</b> <span class="rdx-sub">${r.sub}</span></span>
-        <code>${esc(r.schema)}</code>
-      </button></li>`).join('')}
-    </ol>
-    <div class="rdx-label">More examples</div>
-    <div class="rdx-tiles">${MORE.map(m => {
-      const t = thumb(m);
-      return `<button type="button" class="rdx-tile" data-ex="${m.id}" aria-pressed="false" title="${esc(t.caption)}">
-        ${t.svg}<b>${esc(m.label)}</b><span class="rdx-sub">${t.fate}</span></button>`;
-    }).join('')}
-    </div>`;
+    <div class="rdx-deckwrap"><div class="rdx-deck">
+      <div class="rdx-label">Rules</div>${RULES.map(r => tile({
+        id: r.id, cls: `k-${r.k}`, title: r.sub,
+        face: `<span class="rdx-face" aria-hidden="true">${GLYPH[r.k]}</span>`,
+        name: r.name, details: [`<span class="rdx-sub">${r.sub}</span>`, `<code>${esc(r.schema)}</code>`],
+      })).join('')}
+      <div class="rdx-label">More examples</div>${MORE.map(m => {
+        const t = thumb(m);
+        return tile({ id: m.id, title: t.caption, face: t.svg, name: esc(m.label), details: [`<span class="rdx-sub">${t.fate}</span>`] });
+      }).join('')}
+    </div></div>`;
 
   root.addEventListener('click', e => {
     const hit = e.target.closest('[data-ex]');

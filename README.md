@@ -17,7 +17,7 @@ npm test        # engine tests, node:test
 | `src/blocks.js` | The nested-block view of a term: one element per node, carrying its path and provenance. |
 | `src/examples.js` | Example programs. Each carries its own `def`s; `--` lines become the caption. |
 | `src/session.js` | Shared state (program, history). Widgets talk to each other only through it. |
-| `src/rules.js` `workbench.js` `graph.js` `race.js` | One widget each: `mountX(root, session)`. The rules widget is a grid of rules plus example tiles, each tile a thumbnail of its reduction graph. |
+| `src/rules.js` `workbench.js` `graph.js` `race.js` | One widget each: `mountX(root, session)`. The rules widget is a deck: a row of rule tiles above a row of example tiles on one shared column grid; each example tile shows a thumbnail of its reduction graph. |
 | `src/redex.js` | `mountAll()`: mounts every `[data-redex]` element on the page with one shared session. |
 | `src/redex.css` | Widget styles, all scoped under `.redex`, all colors and fonts from `--rdx-*` tokens. |
 | `index.html`, `site.css` | The standalone page, styled after the Lean documentation (Verso), without its sidebar. |
