@@ -67,7 +67,7 @@ function thumb(ex) {
 
   const run = runStrategy(term, env, normalNext, 60), cyclic = hasCycle(G), n = run.rows.length - 1;
   const steps = `${n} step${n === 1 ? '' : 's'}`;
-  const nf = '<i class="rdx-nf" aria-hidden="true"></i><span class="rdx-sr">normal form</span>';
+  const nf = '<i class="rdx-nfmark" aria-hidden="true"></i><span class="rdx-sr">normal form</span>';
   const fate = run.status === 'done' ? `${nf} in ${steps}${cyclic ? ', or loops' : ''}`
     : cyclic ? 'loops forever' : 'keeps growing';
   const svg = `<svg class="rdx-thumb" viewBox="0 0 ${TW} ${TH}" aria-hidden="true">${edges}${marks}</svg>`;

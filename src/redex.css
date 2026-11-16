@@ -188,7 +188,7 @@
 .redex .rdx-tile.on { border-color: var(--rdx-accent); box-shadow: inset 0 0 0 1px var(--rdx-accent); }
 .redex .rdx-tile b { font-size: .88rem; line-height: 1.25; margin-top: .2rem; }
 .redex .rdx-tile .rdx-sub { font-size: .76rem; line-height: 1.25; color: var(--rdx-muted); }
-.redex .rdx-nf { display: inline-block; width: .55em; height: .55em; background: var(--rdx-ink); vertical-align: .05em; }
+.redex .rdx-nfmark { display: inline-block; width: .55em; height: .55em; background: var(--rdx-ink); vertical-align: .05em; }
 .redex .rdx-thumb { display: block; width: 100%; height: auto; background: var(--rdx-sunk); }
 .redex .rdx-thumb .m { stroke-width: 1; }
 .redex .rdx-thumb .m.open { stroke-dasharray: 1.5 1.5; }
