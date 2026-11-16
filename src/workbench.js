@@ -13,7 +13,7 @@ import {
 } from './engine.js';
 import { renderBlocks } from './blocks.js';
 import { $$, drawArcs, markFlat } from './dom.js';
-import { act, all, delta, enter, exit, fly, ghost, motion, resize, seq, slide, stagger, wait } from './motion.js';
+import { act, all, crossfade, delta, enter, exit, fly, ghost, motion, resize, seq, slide, stagger, wait } from './motion.js';
 
 const RULE_NAME = {
   alpha: 'α-conversion', beta: 'β-reduction', eta: 'η-reduction', etaS: 'η for structures',
@@ -182,7 +182,10 @@ export function mountWorkbench(root, session) {
   // ---------- move: the redex leaves, its pieces travel, the result arrives ----------
   // A firing is one composition of motion primitives (motion.js), played over one BEAT:
   //   husk     the redex minus its traveling pieces, lifted off the page; it fades out
-  //   pieces   one ghost per bound piece; it flies to each place the result uses it, or fades
+  //   pieces   one ghost per bound piece; it flies to each place the result uses it, or fades.
+  //            A copy of the landing spot flies with it and they crossfade, so a piece that
+  //            looks different where it lands (another box, another font size) changes by
+  //            dissolving, never by scaling, and the landing itself is an exact swap.
   //   result   fades in where the redex was; each landing spot appears as its ghost arrives
   //   context  everything around the redex glides from the old layout to the new one
 
@@ -195,7 +198,7 @@ export function mountWorkbench(root, session) {
     husk?.querySelectorAll('[data-piece]').forEach(e => { e.style.visibility = 'hidden'; });
     for (const pc of pieces) {
       delete pc.el.dataset.piece;
-      if (pc.uid) { pc.ghost = ghost(pc.el, pc.rect); pc.ghost.classList.add('aloft'); }
+      if (pc.uid) pc.ghost = ghost(pc.el);
     }
     return { husk, pieces, layout: layout() };
   }
@@ -212,10 +215,15 @@ export function mountWorkbench(root, session) {
       // A dropped piece fades where it stood; a definition body stays in the list, so its copy just goes.
       if (!hits.length) return pc.external ? act(() => pc.ghost.remove()) : exit(pc.ghost);
       return stagger(40, hits.map((tg, j) => {
-        const g = j ? twin(pc.ghost) : pc.ghost, to = tg.getBoundingClientRect();
-        const [dx, dy] = delta(pc.rect, to), s = Math.max(0.3, Math.min(1.6, to.width / Math.max(1, pc.rect.width)));
+        const src = j ? twin(pc.ghost) : pc.ghost;
+        const dst = ghost(tg, { at: pc.rect, hidden: true, mark: pc.slot ? ['mv', `s${pc.slot}`, 'hard'] : [] });
+        const [dx, dy] = delta(pc.rect, tg.getBoundingClientRect());
         tg.classList.add('arriving');
-        return seq([fly(g, dx, dy, s), land(tg, pc.slot), exit(g, { ms: 200 })]);
+        return seq([
+          all([fly(src, dx, dy), fly(dst, dx, dy), crossfade(src, dst)]),
+          land(tg, pc.slot),
+          act(() => { src.remove(); dst.remove(); }),
+        ]);
       }));
     };
     return all([

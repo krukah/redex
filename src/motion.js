@@ -10,7 +10,8 @@
 //   exit(el)               fade out where it stands, then remove it
 //   slide(el, dx, dy)      play back from an offset to where layout put it (FLIP)
 //   resize(el, from, to)   grow or shrink its box between two rects
-//   fly(el, dx, dy, s)     travel in a straight line by (dx, dy), scaling by s, and stay there
+//   fly(el, dx, dy)        travel in a straight line by (dx, dy) and stay there
+//   crossfade(a, b)        a fades out while b fades in; both stay
 //   draw(path)             stroke an SVG path from start to end (needs pathLength="1" and dasharray 1)
 //
 // Compositions:
@@ -24,6 +25,9 @@
 //   EASE.move      ease-in-out, a little quicker to start than to stop; for travel and layout
 //   EASE.enter     decelerate; things arriving
 //   EASE.exit      ease-in-out over opacity; a fade that neither pops nor lingers
+//
+// Nothing is ever scaled. A scaled element is a resampled bitmap: it blurs and changes size.
+// When something must change shape on the way, two copies travel together and crossfade.
 //
 // CSS keyframes are left for color only: highlight afterglows and the graph's "here" pulse.
 const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -62,8 +66,12 @@ export const slide = (el, dx, dy, o = {}) => (Math.abs(dx) < 0.5 && Math.abs(dy)
 export const resize = (el, from, to, o = {}) => (Math.abs(from.width - to.width) < 0.5 && Math.abs(from.height - to.height) < 0.5 ? NONE
   : tween(el, [{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], o));
 export const draw = (path, o = {}) => tween(path, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { ease: EASE.enter, ...o });
-export const fly = (el, dx, dy, s = 1, o = {}) =>
-  tween(el, [{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px) scale(${s})` }], { ...o, keep: true });
+export const fly = (el, dx, dy, o = {}) =>
+  tween(el, [{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px)` }], { ...o, keep: true });
+export const crossfade = (a, b, o = {}) => all([
+  tween(a, [{ opacity: 1 }, { opacity: 0 }], { ms: BEAT * 0.45, ease: EASE.exit, ...o, keep: true }),
+  tween(b, [{ opacity: 0 }, { opacity: 1 }], { ms: BEAT * 0.45, ease: EASE.exit, ...o, keep: true }),
+]);
 
 // ---------- compositions ----------
 export const all = ms => clock => Promise.all(ms.filter(Boolean).map(m => m(clock))).then(() => {});
@@ -73,17 +81,27 @@ export const stagger = (gap, ms) => all(ms.map((m, i) => m && after(i * gap, m))
 export const act = fn => () => Promise.resolve(fn());
 
 // ---------- helpers for FLIP ----------
-// A copy of an element, pinned over the page at the element's current place, ready to move.
-// The original can then be replaced or removed while the copy plays out.
-export function ghost(el, rect = el.getBoundingClientRect()) {
+// A copy of an element, pinned over the page at its own size and centered on `at` (default: where
+// the element is), ready to move. The original can then be replaced or removed while the copy plays.
+//   hidden   start transparent, for a copy that will fade in
+//   mark     classes to put on the copy
+// The copy inherits the original's text settings and keeps its exact box, so it is the same
+// picture as the original, not a re-layout of it in another context.
+const INHERITED = ['font-family', 'font-size', 'font-weight', 'font-style', 'font-variant-ligatures', 'line-height', 'letter-spacing', 'white-space', 'color'];
+export function ghost(el, { at, hidden = false, mark = [] } = {}) {
+  const r = el.getBoundingClientRect(), c = at ? center(at) : center(r), cs = getComputedStyle(el);
   const w = document.createElement('div');
-  w.className = 'redex rdx-ghost rdx-tm';
-  w.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;font-size:${getComputedStyle(el).fontSize}`;
+  w.className = 'redex rdx-ghost';
+  w.style.cssText = `left:${c[0] - r.width / 2}px;top:${c[1] - r.height / 2}px;width:${r.width}px;height:${r.height}px;`
+    + INHERITED.map(p => `${p}:${cs.getPropertyValue(p)}`).join(';') + (hidden ? ';opacity:0' : '');
   const copy = el.cloneNode(true);
-  copy.classList.remove('hot', 'soft');
+  copy.classList.remove('hot', 'soft', 'arriving');
+  copy.classList.add(...mark);
+  copy.style.width = `${r.width}px`; copy.style.height = `${r.height}px`; copy.style.flex = 'none';
   w.appendChild(copy);
   document.body.appendChild(w);
   return w;
 }
+const center = r => [r.left + r.width / 2, r.top + r.height / 2];
 // Offset from rect a's center to rect b's center.
-export const delta = (a, b) => [b.left + b.width / 2 - (a.left + a.width / 2), b.top + b.height / 2 - (a.top + a.height / 2)];
+export const delta = (a, b) => { const [ax, ay] = center(a), [bx, by] = center(b); return [bx - ax, by - ay]; };
