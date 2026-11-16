@@ -1,6 +1,7 @@
 // The strategy race: one start term, three rules for picking the next redex, run side by side.
 import { applicativeNext, esc, isEta, normalNext, parseProgram, redexes, runStrategy, text, whnfNext } from './engine.js';
-import { $$, markFlat, motion } from './dom.js';
+import { $$, markFlat } from './dom.js';
+import { enter, motion } from './motion.js';
 import { RACES } from './examples.js';
 
 const CAP = 24, TICK = 420;
@@ -58,7 +59,7 @@ export function mountRace(root, session, { start = 'dup' } = {}) {
       i++;
       lanes.forEach((l, j) => {
         const li = l.querySelector(`li[data-i="${i}"]`), ol = l.querySelector('ol');
-        if (li) { li.classList.remove('pending'); li.classList.add('new'); ol.scrollTop = ol.scrollHeight; }
+        if (li) { li.classList.remove('pending'); enter(li, { ms: 300 })(); ol.scrollTop = ol.scrollHeight; }
         const steps = runs[j].rows.length - 1;
         l.querySelector('.rdx-count').innerHTML = i <= steps ? String(i) : count(runs[j]);
       });

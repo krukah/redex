@@ -21,11 +21,14 @@ for the file layout and how a page embeds the widgets.
 - One firing grammar for every rule: match, bind, move (README "Core model"). A new rule needs a
   schema and `bindings()` in the engine, and every node it builds from an old one needs `from`;
   the workbench then animates it with no rule-specific code.
-- Firing motion is direct: pieces fly in straight lines (no arcs), and flights and the context glide
-  share one duration and easing (`FLIGHT`, `EASE` in `workbench.js`).
+- All motion goes through `src/motion.js`: primitives (`enter`, `exit`, `slide`, `resize`, `fly`,
+  `draw`) composed with `all`, `seq`, `after`, `stagger`, `act`. No widget calls `element.animate`
+  or adds a CSS keyframe for movement or opacity; CSS keyframes are for color afterglows only.
+- Motion is direct and calm: things travel in straight lines, appear and disappear by fading in
+  place, and a firing's parts share one `BEAT` and the `EASE` curves.
 - Keep the three color channels apart: rule ink, binder hue, highlighter.
-- Every animation checks `motion()`, the CSS honors `prefers-reduced-motion`, and no firing waits on
-  an animation without a timeout (`settle`).
+- `motion()` gates every animation (the primitives check it), the CSS honors
+  `prefers-reduced-motion`, and every primitive resolves on a timer even if its animation stalls.
 - Examples are self-contained: each carries the `def`s it uses.
 
 ## Check

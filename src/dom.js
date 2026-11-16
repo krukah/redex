@@ -1,10 +1,7 @@
-// DOM helpers shared by the widgets: motion, ids, rule letters, binding arcs.
+// DOM helpers shared by the widgets: queries, ids, rule letters, binding arcs. Motion is in motion.js.
 import { GLYPH, KCLS } from './engine.js';
 
 export const $$ = (sel, root) => [...root.querySelectorAll(sel)];
-const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-export const motion = () => !reduced.matches;
-export const wait = ms => new Promise(r => setTimeout(r, ms));
 
 let uid = 0;
 export const nextId = () => ++uid;

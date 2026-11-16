@@ -4,14 +4,23 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const ORDER = ['engine', 'examples', 'session', 'dom', 'blocks', 'rules', 'workbench', 'graph', 'race', 'redex'];
+const IMPORT = /import\s*\{([^}]*)\}\s*from\s*'\.\/([\w-]+)\.js';/g;
+
+// Modules in dependency order, found by following imports from the entry point.
+const order = [], seen = new Set();
+(function visit(name) {
+  if (seen.has(name)) return;
+  seen.add(name);
+  for (const [, , dep] of read(`src/${name}.js`).matchAll(IMPORT)) visit(dep);
+  order.push(name);
+})('redex');
 
 // Each module becomes a function scope; imports read from, and exports write to, __m.
 let js = 'const __m = {};\n';
-for (const name of ORDER) {
+for (const name of order) {
   const names = [];
   const body = read(`src/${name}.js`)
-    .replace(/import\s*\{([^}]*)\}\s*from\s*'\.\/([\w-]+)\.js';/g, (_, ids, mod) => `const {${ids}} = __m['${mod}'];`)
+    .replace(IMPORT, (_, ids, mod) => `const {${ids.replace(/\s+as\s+/g, ': ')}} = __m['${mod}'];`)
     .replace(/^export (const|let|function|async function) ([\w$]+)/gm, (_, kw, id) => { names.push(id); return `${kw} ${id}`; });
   js += `__m['${name}'] = (() => {\n${body}\nreturn { ${names.join(', ')} };\n})();\n`;
 }

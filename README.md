@@ -13,6 +13,7 @@ npm test        # engine tests, node:test
 | Path | What it holds |
 |---|---|
 | `src/engine.js` | Terms, the seven rules as schemas with bindings, capture-avoiding substitution, node provenance, strategies, parser, text printer, graph exploration. No DOM. |
+| `src/motion.js` | Motion primitives (enter, exit, slide, resize, fly, draw) and their compositions (all, seq, after, stagger, act). Every animation is built from these. |
 | `src/blocks.js` | The nested-block view of a term: one element per node, carrying its path and provenance. |
 | `src/examples.js` | Example programs. Each carries its own `def`s; `--` lines become the caption. |
 | `src/session.js` | Shared state (program, history). Widgets talk to each other only through it. |
@@ -30,8 +31,10 @@ npm test        # engine tests, node:test
 - **Rule**: a schema over pattern variables, such as `(λ{x}. {t}) {s} ⟶ {t}[{x} := {s}]`, plus
   `bindings()`, which says where each pattern variable sits inside a redex.
 - **Firing**: match (paint each bound piece in its variable's highlighter color), bind (list the
-  bindings on the rule card), move (fly each piece to every node of the result whose `from` is that
-  piece; pieces with no such node fade where they stood). The same three steps serve all seven rules.
+  bindings on the rule card), move. Move is one composition over one beat: the rest of the redex
+  fades out in place, each bound piece flies in a straight line to every node of the result whose
+  `from` is that piece (or fades if there is none), the result fades in, and the surrounding term
+  glides to its new layout. The same three steps serve all seven rules.
 - **Color channels**: rule ink (badges, edges), binder hue (λ boxes and their variable tags),
   highlighter (pattern variables, only while matching). They never stand in for each other.
 

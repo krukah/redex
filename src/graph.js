@@ -10,7 +10,8 @@
 //   route      an optional strategy drawn as a wide band along the edges it takes
 import { KCLS, esc, exploreGraph, hasCycle, key, applicativeNext, normalNext, runStrategy, size, text, whnfNext } from './engine.js';
 import { renderBlocks } from './blocks.js';
-import { $$, motion, nextId } from './dom.js';
+import { $$, nextId } from './dom.js';
+import { after, all, draw as drawIn, enter, motion } from './motion.js';
 
 const CAP = 70;                        // stop exploring after this many terms
 const GX = 46, ROWH = 58, R = 6;       // column pitch, row pitch, mark radius
@@ -114,8 +115,13 @@ export function mountGraph(root, session) {
     const markers = KINDS.map(k => `<marker id="${uid}-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--rdx-${k})"/></marker>`).join('');
     svg.setAttribute('width', width); svg.setAttribute('height', height);
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    svg.classList.toggle('animate', motion());
     svg.innerHTML = `<defs>${markers}</defs><g class="grid">${grid}</g><g class="routes"></g><g class="edges">${es}</g><g class="nodes">${ns}</g>`;
+    // Grow the graph row by row: marks fade in, then the edges leaving them draw.
+    const row = e => +e.style.getPropertyValue('--d') * 70;
+    all([
+      ...$$('.rdx-gn', svg).map(g => after(row(g), enter(g, { ms: 400 }))),
+      ...$$('.rdx-ge', svg).map(p => after(row(p) + 90, drawIn(p, { ms: 500 }))),
+    ])();
 
     const nf = list.filter(n => n.nf).length, cyclic = hasCycle(G);
     q('.rdx-gstats').textContent = `${list.length} term${list.length > 1 ? 's' : ''} · ${edges.length} step${edges.length === 1 ? '' : 's'} · ${nf} normal form${nf === 1 ? '' : 's'}${G.truncated ? ` · stopped at ${CAP} terms` : ''}`;

@@ -54,10 +54,7 @@
 .redex .rdx-btn.primary { border-color: var(--rdx-accent); color: var(--rdx-accent); }
 .redex .rdx-btn.primary:hover:not(:disabled) { background: var(--rdx-accent); color: var(--rdx-bg); }
 .redex .rdx-btn:disabled { opacity: .4; cursor: default; }
-.redex .rdx-btn:focus-visible, .redex .rdx-link:focus-visible, .redex .rdx-pill:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: 2px; }
-.redex .rdx-link { all: unset; color: var(--rdx-accent); cursor: pointer; }
-.redex .rdx-link:hover { text-decoration: underline; }
-.redex .rdx-link.on { color: var(--rdx-ink); font-weight: 600; }
+.redex .rdx-btn:focus-visible, .redex .rdx-pill:focus-visible { outline: 2px solid var(--rdx-accent); outline-offset: 2px; }
 .redex .rdx-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
 .redex .rdx-pill { all: unset; cursor: pointer; padding: .3rem .65rem; border: 1px solid var(--rdx-line); border-radius: 3px; font-size: .9rem; }
 .redex .rdx-pill:hover { background: var(--rdx-hover); }
@@ -115,10 +112,9 @@
 .redex .rdx-rule .mv { font-style: italic; font-weight: 700; padding: 0 .28em; border-radius: 2px; background: var(--slot); box-shadow: inset 0 -1.5px 0 var(--slot-edge); }
 
 /* move: pieces in flight, then landing */
-.redex.rdx-flyer { position: fixed; z-index: 60; margin: 0; display: flex; align-items: center; pointer-events: none; transform-origin: 50% 50%; will-change: transform, opacity; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .14)); }
+.redex.rdx-ghost { position: fixed; z-index: 60; margin: 0; display: flex; align-items: center; pointer-events: none; transform-origin: 50% 50%; will-change: transform, opacity; }
+.redex.rdx-ghost.aloft { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .14)); }
 .redex .arriving { visibility: hidden; }
-.redex .emerging { animation: rdx-emerge .62s cubic-bezier(.45, 0, .2, 1) both; }
-@keyframes rdx-emerge { from { opacity: .1; } }
 .redex .landed { animation: rdx-land 1.4s ease-out both; }
 @keyframes rdx-land { 0% { background: var(--slot); box-shadow: 0 0 0 2px var(--slot-edge); } 100% { box-shadow: 0 0 0 0 transparent; } }
 .redex .fl-alpha { --flc: var(--rdx-alpha); }
@@ -229,11 +225,7 @@
 .redex .rdx-gn.sel .halo { stroke: var(--rdx-alpha); stroke-dasharray: 3 2; }
 .redex .rdx-gn.here .halo { stroke: var(--rdx-accent); stroke-dasharray: none; }
 .redex .rdx-sz { font: 9.5px var(--rdx-code-font); fill: var(--rdx-muted); }
-.redex .rdx-gsvg.animate .rdx-gn { animation: rdx-pop .4s both; animation-delay: calc(var(--d) * 70ms); }
-.redex .rdx-gsvg.animate .rdx-ge { animation: rdx-draw .5s ease-out both; animation-delay: calc(var(--d) * 70ms + 90ms); }
-.redex .rdx-gsvg.animate .rdx-gn.here .halo { animation: rdx-here 1.8s ease-in-out infinite; }
-@keyframes rdx-pop { from { opacity: 0; } }
-@keyframes rdx-draw { from { stroke-dashoffset: 1; } }
+.redex .rdx-gn.here .halo { animation: rdx-here 1.8s ease-in-out infinite; }
 @keyframes rdx-here { 50% { opacity: .35; } }
 .redex .rdx-tip { position: absolute; z-index: 5; max-width: min(34rem, 92%); padding: .5rem .65rem; background: var(--rdx-bg); border: 1px solid var(--rdx-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .12); font-size: .85rem; pointer-events: none; }
 .redex .rdx-tip .rdx-tm { white-space: pre-wrap; word-break: break-word; font-size: .92rem; }
@@ -265,8 +257,6 @@
 .redex .rdx-end.part { box-shadow: inset 3px 0 0 var(--rdx-accent); color: var(--rdx-accent); }
 .redex .rdx-end.loops { box-shadow: inset 3px 0 0 var(--rdx-danger); color: var(--rdx-danger); }
 .redex .rdx-lane li.pending { display: none; }
-.redex .rdx-lane li.new { animation: rdx-in .3s ease-out both; }
-@keyframes rdx-in { from { opacity: 0; transform: translateY(4px); } }
 
 @media (max-width: 760px) {
   .redex .rdx-lanes { grid-template-columns: minmax(0, 1fr); }

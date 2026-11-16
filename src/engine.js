@@ -1,4 +1,4 @@
-// Term engine: syntax, the seven rules, strategies, parser, printer, reduction graph.
+// Term engine: syntax, the seven rules, strategies, parser, text printer, reduction graph.
 // Pure: no DOM. Tested by test/engine.test.js.
 // Every node gets a fresh `uid`. A node derived from an older one records it in `from`,
 // so a renderer can tell where each piece of a result came from.
@@ -13,13 +13,13 @@ export const P = (a, b) => mk({ k: 'pair', a, b });
 export const PR = (i, t) => mk({ k: 'proj', i, t });
 const from = (n, old) => ((n.from = old.uid), n);
 
-export const PRIMS = new Set(['zero', 'succ', 'Nat.rec']);
-export const ALIAS = { 'Nat.zero': 'zero', 'Nat.succ': 'succ' };
+const PRIMS = new Set(['zero', 'succ', 'Nat.rec']);
+const ALIAS = { 'Nat.zero': 'zero', 'Nat.succ': 'succ' };
 export const CONSTS = new Set(PRIMS);
 export const EMPTY = new Map();
-export const KIDS = { var: [], const: [], lam: ['b'], app: ['f', 'a'], let: ['v', 'b'], pair: ['a', 'b'], proj: ['t'] };
+const KIDS = { var: [], const: [], lam: ['b'], app: ['f', 'a'], let: ['v', 'b'], pair: ['a', 'b'], proj: ['t'] };
 
-export function clone(t) {
+function clone(t) {
   switch (t.k) {
     case 'var': return from(V(t.n), t);
     case 'const': return from(C(t.n), t);
@@ -46,7 +46,7 @@ export function names(t, s = new Set()) {
   for (const c of KIDS[t.k]) names(t[c], s);
   return s;
 }
-export const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+const SUBS = '₀₁₂₃₄₅₆₇₈₉';
 export const stripSub = s => s.replace(/[₀-₉]+$/, '');
 export function fresh(base, avoid) {
   const root = stripSub(base);
@@ -83,7 +83,7 @@ export function subst(t, x, s, fvs, mark) {
     }
   }
 }
-export const substitute = (t, x, s, mark) => subst(t, x, s, fv(s), mark);
+const substitute = (t, x, s) => subst(t, x, s, fv(s));
 
 // Rename only the binders inside t that would capture a free variable of the argument.
 export function prepare(t, x, fvs, log) {
@@ -111,7 +111,7 @@ export function prepare(t, x, fvs, log) {
 }
 
 // Substitution without renaming: shows what capture looks like.
-export function tagFree(t, fr, bound = new Set()) {
+function tagFree(t, fr, bound = new Set()) {
   if (t.k === 'var' && !bound.has(t.n) && fr.has(t.n)) t.cap = true;
   if (t.k === 'lam' || t.k === 'let') {
     if (t.k === 'let') tagFree(t.v, fr, bound);
@@ -145,15 +145,15 @@ export function key(t, ctx = []) {
     case 'proj': return 'π' + t.i + '(' + key(t.t, ctx) + ')';
   }
 }
-export const aeq = (a, b) => key(a) === key(b);
+const aeq = (a, b) => key(a) === key(b);
 
 export function natVal(t) {
   let n = 0;
   while (t.k === 'app' && t.f.k === 'const' && t.f.n === 'succ') { n++; t = t.a; }
   return t.k === 'const' && t.n === 'zero' ? n : null;
 }
-export const isCtor = t => (t.k === 'const' && t.n === 'zero') || (t.k === 'app' && t.f.k === 'const' && t.f.n === 'succ');
-export function recArgs(t) {
+const isCtor = t => (t.k === 'const' && t.n === 'zero') || (t.k === 'app' && t.f.k === 'const' && t.f.n === 'succ');
+function recArgs(t) {
   if (t.k !== 'app' || t.f.k !== 'app' || t.f.f.k !== 'app') return null;
   const h = t.f.f.f;
   return h.k === 'const' && h.n === 'Nat.rec' ? [t.f.f.a, t.f.a, t.a] : null;
@@ -205,27 +205,20 @@ export function bindings(t, kind) {
 // Pattern variables in order of first appearance; a variable's slot color is its index.
 export const schemaVars = schema => [...new Set([...schema.matchAll(/\{(\w)\}/g)].map(m => m[1]))];
 
-export function contract(t, kind, env, mark) {
-  let r;
+// The contractum of the redex t under rule `kind`.
+export function contract(t, kind, env) {
   switch (kind) {
-    case 'beta': case 'zeta': {
-      const x = kind === 'beta' ? t.f.x : t.x, body = kind === 'beta' ? t.f.b : t.b, arg = kind === 'beta' ? t.a : t.v;
-      r = substitute(body, x, arg, mark);
-      if (mark && !fv(body).has(x)) { r = clone(r); r.mark = mark; }
-      return r;
-    }
-    case 'delta': r = clone(env.get(t.n)); break;
+    case 'beta': return substitute(t.f.b, t.f.x, t.a);
+    case 'zeta': return substitute(t.b, t.x, t.v);
+    case 'delta': return clone(env.get(t.n));
     case 'iota': {
       const [z, s, n] = recArgs(t);
-      r = n.k === 'const' ? clone(z) : A(A(s, n.a), A(A(A(C('Nat.rec'), z), s), n.a));
-      break;
+      return n.k === 'const' ? clone(z) : A(A(s, n.a), A(A(A(C('Nat.rec'), z), s), n.a));
     }
-    case 'proj': r = clone(t.i === 1 ? t.t.a : t.t.b); break;
-    case 'eta': r = clone(t.b.f); break;
-    case 'etaS': r = clone(t.a.t); break;
+    case 'proj': return clone(t.i === 1 ? t.t.a : t.t.b);
+    case 'eta': return clone(t.b.f);
+    case 'etaS': return clone(t.a.t);
   }
-  if (mark) r.mark = mark;
-  return r;
 }
 
 export function at(t, p) { for (const c of p) t = t[c]; return t; }
@@ -275,7 +268,7 @@ export function whnfNext(t, env, p = '') {
 }
 
 // ===================== Parser =====================
-export function tokenize(src) {
+function tokenize(src) {
   const toks = []; let i = 0;
   const idStart = c => /[A-Za-z_Ͱ-Ͽ]/.test(c) && c !== 'λ';
   const idChar = c => /[A-Za-z0-9_'!?Ͱ-Ͽ₀-₉]/.test(c) && c !== 'λ';
@@ -308,7 +301,7 @@ export function tokenize(src) {
   }
   return toks;
 }
-export const tokText = tk => tk.t === 'id' || tk.t === 'num' ? String(tk.v) : tk.t === 'proj' ? '.' + tk.v : tk.t;
+const tokText = tk => tk.t === 'id' || tk.t === 'num' ? String(tk.v) : tk.t === 'proj' ? '.' + tk.v : tk.t;
 
 export function parseTerm(src) {
   const toks = tokenize(src); let k = 0;
@@ -367,7 +360,7 @@ export function parseTerm(src) {
   return t;
 }
 
-export function resolve(t, env, bound = new Set()) {
+function resolve(t, env, bound = new Set()) {
   switch (t.k) {
     case 'var': {
       if (bound.has(t.n)) return t;
@@ -409,58 +402,23 @@ export const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': 
 export const KCLS = k => (k === 'etaS' ? 'eta' : k);
 export const GLYPH = { alpha: 'α', beta: 'β', eta: 'η', etaS: 'η', delta: 'δ', zeta: 'ζ', iota: 'ι', proj: 'π' };
 
-export function show(t, o = {}) {
-  const H = !!o.html, env = o.env || EMPTY, chips = !!o.chips, db = !!o.db && H;
-  let nid = 0;
-  const go = (t, p, ctx, prec) => {
-    let body, paren = false, attrs = '';
-    const kind = chips ? redexKind(t, env) : null;
+// Lean-like plain text with as few parentheses as the grammar allows.
+export function text(t) {
+  const go = (t, prec) => {
     const nat = natVal(t);
-    if (nat !== null) body = H ? `<span class="rnum">${nat}</span>` : String(nat);
-    else switch (t.k) {
-      case 'var': {
-        let j = ctx.length - 1; while (j >= 0 && ctx[j].x !== t.n) j--;
-        if (j < 0) body = H ? `<span class="rv rfree">${esc(t.n)}</span>` : t.n;
-        else {
-          const lab = db ? String(ctx.length - 1 - j) : t.n;
-          body = H ? `<span class="rv${db ? ' rix' : ''}">${esc(lab)}</span>` : lab;
-          attrs += ` data-bid="${ctx[j].id}"`;
-        }
-        break;
-      }
-      case 'const': body = H ? `<span class="rc${env.has(t.n) ? ' rdef' : ''}">${esc(t.n)}</span>` : t.n; break;
-      case 'lam': case 'let': {
-        const id = ++nid; attrs += ` data-binder="${id}"`;
-        const tag = chips ? 'button' : 'span';
-        const fl = t.mark === 'alphaB' ? ' fl fl-alpha' : '';
-        const bn = H ? `<${tag} class="rb${fl}"${chips ? ` type="button" title="Rename (α)"` : ''} data-path="${p}" data-anchor="${id}">${esc(t.x)}</${tag}>` : t.x;
-        const kw = (s, anchor) => (H ? `<span class="rk"${anchor ? ` data-anchor="${id}"` : ''}>${s}</span>` : s);
-        const inner = [...ctx, { x: t.x, id }];
-        if (t.k === 'lam') body = kw('λ', db) + (db ? '' : bn) + kw('.') + ' ' + go(t.b, p + 'b', inner, 0);
-        else body = kw('let', db) + ' ' + (db ? '' : bn + ' ') + kw(':=') + ' ' + go(t.v, p + 'v', ctx, 0) + kw(';') + ' ' + go(t.b, p + 'b', inner, 0);
-        paren = prec >= 1;
-        break;
-      }
-      case 'app': body = go(t.f, p + 'f', ctx, 1) + ' ' + go(t.a, p + 'a', ctx, 2); paren = prec >= 2; break;
-      case 'pair': {
-        const pu = s => (H ? `<span class="rp">${s}</span>` : s);
-        body = pu('(') + go(t.a, p + 'a', ctx, 0) + pu(',') + ' ' + go(t.b, p + 'b', ctx, 0) + pu(')');
-        break;
-      }
-      case 'proj': body = go(t.t, p + 't', ctx, 3) + (H ? `<span class="rj">.${t.i}</span>` : '.' + t.i); break;
+    if (nat !== null) return String(nat);
+    switch (t.k) {
+      case 'var': case 'const': return t.n;
+      case 'lam': return wrap(`λ${t.x}. ${go(t.b, 0)}`, prec >= 1);
+      case 'let': return wrap(`let ${t.x} := ${go(t.v, 0)}; ${go(t.b, 0)}`, prec >= 1);
+      case 'app': return wrap(`${go(t.f, 1)} ${go(t.a, 2)}`, prec >= 2);
+      case 'pair': return `(${go(t.a, 0)}, ${go(t.b, 0)})`;
+      case 'proj': return `${go(t.t, 3)}.${t.i}`;
     }
-    if (!H) return paren ? `(${body})` : body;
-    let cls = 'rn';
-    if (kind) cls += ` rr k-${KCLS(kind)}`;
-    if (t.mark && t.mark !== 'alphaB') cls += ` fl ${t.mark}`;
-    if (t.cap) cls += ' cap';
-    const chip = kind ? `<button type="button" class="rm k-${KCLS(kind)}" aria-label="Fire ${kind}">${GLYPH[kind]}</button>` : '';
-    const span = `<span class="${cls}" data-path="${p}"${kind ? ` data-kind="${kind}"` : ''}${attrs}>${chip}${body}</span>`;
-    return paren ? `<span class="rp">(</span>${span}<span class="rp">)</span>` : span;
   };
-  return go(t, '', [], 0);
+  const wrap = (s, on) => (on ? `(${s})` : s);
+  return go(t, 0);
 }
-export const text = t => show(t);
 
 // ===================== Reduction graph =====================
 export function exploreGraph(start, env, withEta, cap) {

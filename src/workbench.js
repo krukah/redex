@@ -12,7 +12,8 @@ import {
   substNaive, text, whnfNext,
 } from './engine.js';
 import { renderBlocks } from './blocks.js';
-import { $$, drawArcs, markFlat, motion, wait } from './dom.js';
+import { $$, drawArcs, markFlat } from './dom.js';
+import { act, all, delta, enter, exit, fly, ghost, motion, resize, seq, slide, stagger, wait } from './motion.js';
 
 const RULE_NAME = {
   alpha: 'α-conversion', beta: 'β-reduction', eta: 'η-reduction', etaS: 'η for structures',
@@ -21,11 +22,8 @@ const RULE_NAME = {
 const HINT = 'Hover a badge to see its rule match. Click to fire it. Click a binder to rename it. <kbd>→</kbd> steps, <kbd>←</kbd> goes back.';
 const NAMES = ['x', 'y', 'z', 'w', 'u', 'v', 'a', 'b', 'c', 'f', 'g', 'h', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't'];
 const short = (s, n = 34) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
-// An animation's end, or its scheduled end, whichever comes first: a throttled or paused
-// timeline must never leave a firing half done.
-// One duration and one easing for every moving part of a firing.
-const FLIGHT = 620, EASE = 'cubic-bezier(.45, 0, .2, 1)';
-const settle = (anim, ms) => Promise.race([anim.finished.catch(() => {}), wait(ms + 60)]);
+const HOLD = 560;     // how long a firing shows its match before anything moves, at speed 1
+const RENAME = 1000;  // how long an automatic α step stays on screen before its β fires
 
 export function mountWorkbench(root, session) {
   root.innerHTML = `
@@ -181,90 +179,79 @@ export function mountWorkbench(root, session) {
     $$(`[data-id="${id}"], [data-bid="${id}"], .rb[data-anchor="${id}"]`, el.stage).forEach(e => e.classList.add('lit'));
   }
 
-  // ---------- move: fly each bound piece to where the result uses it ----------
-  function snapshot(m) {
-    return m.pieces.map(pc => ({ ...pc, rect: pc.el.getBoundingClientRect(), ghost: pc.el.cloneNode(true), font: getComputedStyle(pc.el).fontSize }));
-  }
-  function ghostAt(pc) {
-    const w = document.createElement('div');
-    w.className = 'redex rdx-flyer rdx-tm';
-    w.style.cssText = `left:${pc.rect.left}px;top:${pc.rect.top}px;width:${pc.rect.width}px;height:${pc.rect.height}px;font-size:${pc.font}`;
-    pc.ghost.classList.remove('hot', 'soft');
-    w.appendChild(pc.ghost.cloneNode(true));
-    document.body.appendChild(w);
-    return w;
-  }
-  // Every piece travels in a straight line, with one easing curve shared by the context glide,
-  // so the whole step reads as one motion. Terms sit on one line, so most paths are horizontal.
-  async function move(snap, path, speed) {
-    const result = node(path);
-    if (!result) return;
-    result.classList.add('emerging');
-    const ms = FLIGHT / speed;
-    const flights = snap.map((pc, i) => {
-      const hits = !pc.uid ? [] : [result, ...result.querySelectorAll('[data-uid], [data-from]')]
-        .filter(e => e.dataset.uid === pc.uid || e.dataset.from === pc.uid);
-      const delay = (i * 50) / speed;
-      if (!hits.length) {
-        if (pc.external) return null;
-        const g = ghostAt(pc), out = ms * 0.6;
-        return settle(g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.85)' }],
-          { duration: out, delay, easing: 'ease-out', fill: 'both' }), delay + out).then(() => g.remove());
-      }
-      return Promise.all(hits.map((tg, j) => {
-        tg.classList.add('arriving');
-        const tr = tg.getBoundingClientRect(), g = ghostAt(pc);
-        const dx = tr.left + tr.width / 2 - (pc.rect.left + pc.rect.width / 2);
-        const dy = tr.top + tr.height / 2 - (pc.rect.top + pc.rect.height / 2);
-        const sc = Math.max(0.3, Math.min(1.6, tr.width / Math.max(1, pc.rect.width)));
-        const lag = delay + (j * 40) / speed, fade = Math.min(220, ms * 0.35);
-        const flight = settle(g.animate([{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px) scale(${sc})` }],
-          { duration: ms, delay: lag, easing: EASE, fill: 'both' }), lag + ms);
-        // On arrival the real piece is already in place under the ghost; the ghost then dissolves.
-        return flight.then(() => {
-          tg.classList.remove('arriving');
-          if (pc.slot) tg.classList.add('landed', `s${pc.slot}`);
-          return settle(g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fade, easing: 'linear', fill: 'both' }), fade);
-        }).then(() => g.remove());
-      }));
-    });
-    await Promise.all(flights);
+  // ---------- move: the redex leaves, its pieces travel, the result arrives ----------
+  // A firing is one composition of motion primitives (motion.js), played over one BEAT:
+  //   husk     the redex minus its traveling pieces, lifted off the page; it fades out
+  //   pieces   one ghost per bound piece; it flies to each place the result uses it, or fades
+  //   result   fades in where the redex was; each landing spot appears as its ghost arrives
+  //   context  everything around the redex glides from the old layout to the new one
+
+  // Before the step: pin the redex and its pieces over the page, and measure the layout.
+  function lift(m, path) {
+    const rx = node(path), pieces = m.pieces.map((pc, i) => ({ ...pc, i, rect: pc.el.getBoundingClientRect() }));
+    const travels = pc => pc.uid && !pc.external;
+    pieces.forEach(pc => { if (travels(pc)) pc.el.dataset.piece = pc.i; });
+    const husk = rx && ghost(rx);
+    husk?.querySelectorAll('[data-piece]').forEach(e => { e.style.visibility = 'hidden'; });
+    for (const pc of pieces) {
+      delete pc.el.dataset.piece;
+      if (pc.uid) { pc.ghost = ghost(pc.el, pc.rect); pc.ghost.classList.add('aloft'); }
+    }
+    return { husk, pieces, layout: layout() };
   }
 
-  // The rest of the term glides from its old layout to the new one instead of snapping:
-  // boxes that enclose the redex animate their size, nodes beside it slide, the stage resizes.
+  // After the step: the composition that carries the old layout to the new one.
+  function moveTo(lifted, path) {
+    const result = node(path);
+    if (!result) return all([lifted.husk && exit(lifted.husk), ...lifted.pieces.map(pc => pc.ghost && exit(pc.ghost))]);
+    const land = (tg, slot) => act(() => { tg.classList.remove('arriving'); if (slot) tg.classList.add('landed', `s${slot}`); });
+    const travel = pc => {
+      if (!pc.ghost) return null;
+      const hits = [result, ...result.querySelectorAll('[data-uid], [data-from]')]
+        .filter(e => e.dataset.uid === pc.uid || e.dataset.from === pc.uid);
+      // A dropped piece fades where it stood; a definition body stays in the list, so its copy just goes.
+      if (!hits.length) return pc.external ? act(() => pc.ghost.remove()) : exit(pc.ghost);
+      return stagger(40, hits.map((tg, j) => {
+        const g = j ? twin(pc.ghost) : pc.ghost, to = tg.getBoundingClientRect();
+        const [dx, dy] = delta(pc.rect, to), s = Math.max(0.3, Math.min(1.6, to.width / Math.max(1, pc.rect.width)));
+        tg.classList.add('arriving');
+        return seq([fly(g, dx, dy, s), land(tg, pc.slot), exit(g, { ms: 200 })]);
+      }));
+    };
+    return all([
+      lifted.husk && exit(lifted.husk),
+      enter(result),
+      stagger(50, lifted.pieces.map(travel)),
+      glide(lifted.layout, result),
+    ]);
+  }
+  const twin = g => document.body.appendChild(g.cloneNode(true));
+
   function layout() {
     const rects = new Map([['stage', el.stage.getBoundingClientRect()]]);
     el.line.querySelectorAll('[data-uid]').forEach(e => rects.set(e.dataset.uid, e.getBoundingClientRect()));
     return rects;
   }
-  function glide(before, path, speed) {
-    const result = node(path), ms = FLIGHT / speed, ease = EASE, anims = [];
-    if (!result) return null;
-    const size = (e, old) => {
-      const now = e.getBoundingClientRect();
-      if (Math.abs(now.width - old.width) > 0.5 || Math.abs(now.height - old.height) > 0.5) {
-        anims.push(e.animate([{ width: `${old.width}px`, height: `${old.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }], { duration: ms, easing: ease }));
-      }
-    };
+  // Boxes that enclose the result change size, nodes beside it slide, new context fades in,
+  // and the stage resizes. Binding links step aside until the layout settles.
+  function glide(before, result) {
+    const moves = [resize(el.stage, before.get('stage'), el.stage.getBoundingClientRect())];
     const visit = parent => {
       for (const c of parent.children) {
         if (c === result) continue;
         if (c.dataset.uid === undefined) { visit(c); continue; }
-        const old = before.get(c.dataset.uid);
-        if (c.contains(result)) { if (old) size(c, old); visit(c); continue; }
-        if (!old) { anims.push(c.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: ease })); continue; }
-        const now = c.getBoundingClientRect(), dx = old.left - now.left, dy = old.top - now.top;
-        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) anims.push(c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: ms, easing: ease }));
+        const old = before.get(c.dataset.uid), now = c.getBoundingClientRect();
+        if (c.contains(result)) { if (old) moves.push(resize(c, old, now)); visit(c); }
+        else if (!old) moves.push(enter(c));
+        else moves.push(slide(c, old.left - now.left, old.top - now.top));
       }
     };
     visit(el.line);
-    size(el.stage, before.get('stage'));
-    el.stage.classList.add('moving');
-    return Promise.all(anims.map(a => settle(a, ms))).then(() => {
-      el.stage.classList.remove('moving');
-      drawArcs(el.stage, el.line, W.arcs);
-    });
+    return seq([
+      act(() => el.stage.classList.add('moving')),
+      all(moves),
+      act(() => { el.stage.classList.remove('moving'); drawArcs(el.stage, el.line, W.arcs); }),
+    ]);
   }
 
   // ---------- firing ----------
@@ -278,23 +265,21 @@ export function mountWorkbench(root, session) {
         const renamed = kind === 'beta' ? A(L(lam.x, body), arg) : LET(redex.x, redex.v, body);
         const olds = log.map(l => l[0]).join(', ');
         session.push({ term: replace(t, path, renamed), kind: 'alpha', note: `${log.map(([a, b]) => `${a} → ${b}`).join(', ')}, so the argument’s free ${olds} stays free` });
-        if (motion()) await wait(1000 / speed);
+        if (motion()) await wait(RENAME / speed);
       }
     }
-    let snap = [], before = null;
+    let lifted = null;
     if (motion()) {
-      const rx = node(path);
-      const m = match(path, kind);
+      const rx = node(path), m = match(path, kind);
       W.hot = null;
       rx?.classList.add('firing');
       showRule(rx, m); paint(m, 'hard');
-      await wait(560 / speed);
-      snap = snapshot(m);
-      before = layout();
+      await wait(HOLD / speed);
+      lifted = lift(m, path);
     }
     const now = session.term;
     session.push({ term: replace(now, path, contract(at(now, path), kind, session.env)), kind });
-    if (motion()) await Promise.all([move(snap, path, speed), glide(before, path, speed)]);
+    if (lifted) await moveTo(lifted, path)({ speed });
   }
 
   async function fireOnce(path, kind) {
