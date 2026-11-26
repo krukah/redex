@@ -158,3 +158,35 @@ Decisions
   microtask.
 
 Size: 125.6 KB gzipped (the workbench brings in more of Leptos and web-sys).
+
+## 5. Rules deck, graph, race — done
+
+`Deck` (`Tiles` renders the markup), `Paths` (`Chart`: SVG, stats, verdict, route bands, tip,
+selection, chain to open), `Lanes` (`Track`: pills, lanes, endings; the tick schedule on
+`gloo_timers::callback::Timeout`). Committed one at a time, each after its own parity pass.
+
+Parity: `scripts/parity.mjs` with `scripts/parity-states.json` (28 states: the workbench set from
+milestone 4, graph routes ×3, η toggle, Ω, tip, select, open in workbench, walked marks, rebuild,
+races lazy/under/bench/again, mid-race at 1.3 s, mid-firing at 0.3 and 0.8 s, keys), each with
+reduced motion and full motion. **The canonical DOM of all four widgets, plus every ghost pinned
+to the body, is identical in all 56 runs**, tooltip position styles included.
+
+Screenshots, pixel-compared in the same headless Chrome: 32 of 56 identical. The rest:
+
+- Reduced motion, 3 states (back, lazy race, keys): 139–174 scattered pixels, single-pixel
+  differences around the fixed header's shadow and a few glyph edges, after the page has scrolled.
+  Not visible side by side; not traced further.
+- Full motion: differences sit only where a CSS keyframe is mid-flight at capture time (the
+  graph's "here" halo pulse, the landing and flash afterglows, the race lanes fading in), whose
+  phase depends on when the screenshot lands. Motion parity is judged by constants and
+  composition structure, per the plan.
+
+Decisions
+
+- Component names avoid the engine's types: `Deck` (rules), `Paths` (graph), `Lanes` (race).
+- The graph opens a term with `document.querySelector('[data-redex="workbench"]')`, as the JS
+  does, although it reaches outside the widget's root. Ported as-is.
+- A widget whose markup must exist before the first `load` event (the deck, the race's initial
+  lanes) renders it through `inner_html` in `view!`, so it is in the DOM when `mount_to` returns.
+
+Size: 155.0 KB gzipped.

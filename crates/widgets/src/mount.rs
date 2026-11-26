@@ -33,6 +33,7 @@ impl Mount {
                     "rules" => view! { <Deck/> }.into_any(),
                     "workbench" => view! { <Workbench/> }.into_any(),
                     "graph" => view! { <Paths/> }.into_any(),
+                    "race" => view! { <Lanes/> }.into_any(),
                     _ => ().into_any(),
                 }
             });
