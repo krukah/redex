@@ -73,3 +73,22 @@ JS behaviour ported as-is (looks like a bug)
   `String`; the only gap, and only in an error message.
 
 Size: unchanged (engine not linked into the page yet).
+
+## 2. Geometry and data — done
+
+`layout` (`Plot` for the graph widget, `Thumb` for the deck) and `examples` (`Example`, `Race`).
+
+- `scripts/golden-dom.mjs` reads the JS page in headless Chrome (`playwright-core` driving the
+  installed Chrome, reduced motion) and writes `fixtures/dom/`: the deck's HTML, the graph widget's
+  SVG, stats, verdict and all four route bands for every example and random term, with η off and
+  on, and the race lanes for every race. Deterministic (two runs, no diff); CI reruns it.
+- `crates/layout/tests/plot.rs`: width, height, every vertex position and every edge path, as the
+  strings JS wrote, for 97 terms × 2. `tests/thumb.rs`: every thumbnail SVG and fate line, byte for
+  byte (the fixture's DOM serialization `></path>` is mapped back to the source's `/>`).
+
+Decisions
+
+- Coordinates print through `term::Number` (`String(x)` and `toFixed(1)`), and every expression
+  keeps the JS operation order, since the strings must match to the last digit.
+- `playwright-core` is installed with `--no-save`: `package.json` stays as it was, and the
+  dependency disappears with the JS at cutover.

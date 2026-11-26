@@ -53,6 +53,8 @@ jobs:
           node-version: 22
       - run: node --test
       - run: node scripts/golden.mjs && git diff --exit-code fixtures
+      - run: npm i --no-save playwright-core
+      - run: node scripts/golden-dom.mjs "$(which google-chrome)" && git diff --exit-code fixtures
 
   page:
     name: Trunk build

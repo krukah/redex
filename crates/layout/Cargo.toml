@@ -16,3 +16,8 @@ explore = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+syntax     = { workspace = true }
+examples   = { workspace = true }
+serde_json = { workspace = true }
