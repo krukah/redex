@@ -190,3 +190,33 @@ Decisions
   lanes) renders it through `inner_html` in `view!`, so it is in the DOM when `mount_to` returns.
 
 Size: 155.0 KB gzipped.
+
+## 6. Embedding — done
+
+- `mountAll(scope?)` is exported from the `redex` cdylib (`crates/redex/src/embed.rs`). Every
+  `[data-redex]` element under the scope (default: the document) gets its widget, all on one
+  session; `data-example` on any of them picks the first example; an unknown kind is skipped.
+- `scripts/site.sh` builds `dist/site/{redex.js, redex_bg.wasm, redex.css}` for the Jekyll site
+  (wasm-bindgen `--target web`, `wasm-opt -Oz`). Checked on a host page in headless Chrome with
+  prose between widgets, the graph before the workbench, `data-example="church"`, and a bogus
+  `data-redex="nope"`: all four widgets mount, picking a tile moves the workbench, the graph and
+  the race's "Workbench term" together. 176.8 KB of wasm, gzipped.
+- `scripts/bundle-wasm.mjs` writes the single-file artifact: the page, both stylesheets, the glue
+  and the wasm as base64 (622 KB). It boots and mounts all four widgets in headless Chrome.
+
+Decisions and gaps
+
+- Host contract changes from `import { mountAll } from '…/redex.js'; mountAll();` to
+  `import init, { mountAll } from '…/redex.js'; await init(); mountAll();`. README is updated at
+  cutover.
+- `mountAll` returns nothing; the JS returned the session object. Nothing on the page used it.
+- `mount_all` carries `// lint:allow(free-function)`: a module-level wasm-bindgen export must be a
+  bare `fn`. The alternative, a static method (`Redex.mountAll()`), would change the host API
+  further.
+- The bundle is a new script beside the JS `scripts/bundle.mjs`, which still bundles the JS page;
+  at cutover it replaces it.
+- Not verified: that a claude.ai artifact's sandbox allows compiling wasm (it needs
+  `wasm-unsafe-eval` under a strict CSP). CI does not run `scripts/site.sh` (it needs a
+  wasm-bindgen CLI pinned to `Cargo.lock`'s version and a recent `wasm-opt`).
+
+Size: 155.2 KB gzipped (page); 176.8 KB (site build, with the `mountAll` export).

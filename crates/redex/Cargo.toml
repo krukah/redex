@@ -8,14 +8,14 @@ license.workspace      = true
 publish.workspace      = true
 description  = "Mounts the Redex widgets on a page"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-widgets = { workspace = true }
-leptos = { workspace = true }
-wasm-bindgen = { workspace = true }
-web-sys = { workspace = true }
+widgets                  = { workspace = true }
+wasm-bindgen             = { workspace = true }
+web-sys                  = { workspace = true, features = ["Document", "Element", "Window"] }
+console_error_panic_hook = { workspace = true }
 
 [lints]
 workspace = true
-
-[lib]
-crate-type = ["cdylib", "rlib"]

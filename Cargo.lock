@@ -1142,7 +1142,7 @@ dependencies = [
 name = "redex"
 version = "0.1.0"
 dependencies = [
- "leptos",
+ "console_error_panic_hook",
  "wasm-bindgen",
  "web-sys",
  "widgets",
