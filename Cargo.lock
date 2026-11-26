@@ -1810,6 +1810,7 @@ dependencies = [
  "leptos",
  "motion",
  "rules",
+ "serde_json",
  "strategy",
  "subst",
  "syntax",

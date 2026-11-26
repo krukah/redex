@@ -1,0 +1,242 @@
+use std::future::Future;
+use std::pin::Pin;
+
+use wasm_bindgen::prelude::*;
+use web_sys::DomRect;
+use web_sys::Element;
+
+use crate::*;
+
+/// Something that plays at a `Clock` and resolves when it is done. It always resolves: each
+/// primitive also races a timer, so a throttled or paused timeline never leaves the page half
+/// animated. Nothing is ever scaled; a change of shape is two copies that crossfade.
+pub struct Motion(Box<dyn FnOnce(Clock) -> Pin<Box<dyn Future<Output = ()>>>>);
+
+impl Motion {
+    /// The length of one firing's movement, at speed 1.
+    pub const BEAT: f64 = 620.0;
+
+    pub fn new<F>(play: F) -> Self
+    where
+        F: FnOnce(Clock) -> Pin<Box<dyn Future<Output = ()>>> + 'static,
+    {
+        Self(Box::new(play))
+    }
+
+    pub fn none() -> Self {
+        Self::new(|_| Box::pin(async {}))
+    }
+
+    /// Starts the motion now; the future resolves when it is done.
+    pub fn play(self, clock: Clock) -> Pin<Box<dyn Future<Output = ()>>> {
+        (self.0)(clock)
+    }
+
+    /// False when the reader asked for reduced motion. Every primitive checks it when it plays.
+    pub fn enabled() -> bool {
+        !web_sys::window()
+            .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten())
+            .is_some_and(|m| m.matches())
+    }
+
+    /// Resolves after `ms`, as `setTimeout` counts them.
+    pub fn wait(ms: f64) -> Pin<Box<dyn Future<Output = ()>>> {
+        Box::pin(gloo_timers::future::TimeoutFuture::new(if ms > 0.0 { ms as u32 } else { 0 }))
+    }
+
+    /// The one place that calls `Element::animate`.
+    fn tween(el: &Element, frames: &[&[(&str, JsValue)]], o: Tween) -> Self {
+        let el = el.clone();
+        let frames = frames
+            .iter()
+            .map(|frame| {
+                let obj = js_sys::Object::new();
+                frame.iter().for_each(|(k, v)| {
+                    let _ = js_sys::Reflect::set(&obj, &JsValue::from_str(k), v);
+                });
+                obj
+            })
+            .collect::<js_sys::Array>();
+        Self::new(move |clock| {
+            if !Self::enabled() {
+                return Box::pin(async {});
+            }
+            let (duration, delay) = (clock.scale(o.duration()), clock.scale(o.wait()));
+            let opts = js_sys::Object::new();
+            [
+                ("duration", JsValue::from_f64(duration)),
+                ("delay", JsValue::from_f64(delay)),
+                ("easing", o.easing().into()),
+                ("fill", "both".into()),
+            ]
+            .iter()
+            .for_each(|(k, v)| {
+                let _ = js_sys::Reflect::set(&opts, &JsValue::from_str(k), v);
+            });
+            let a = Self::call(&el, "animate", &[frames.clone().into(), opts.into()]);
+            let finished = js_sys::Reflect::get(&a, &"finished".into())
+                .ok()
+                .and_then(|p| p.dyn_into::<js_sys::Promise>().ok())
+                .map_or_else(|| Box::pin(async {}) as Pin<Box<dyn Future<Output = ()>>>, |p| Box::pin(Settle::new(&p)));
+            Box::pin(async move {
+                Race::new(finished, Self::wait(delay + duration + 60.0)).await;
+                if !o.keeps() {
+                    Self::call(&a, "cancel", &[]);
+                }
+            })
+        })
+    }
+
+    /// Calls a method by name: `Element::animate` sits behind web-sys's unstable APIs.
+    fn call(this: &JsValue, name: &str, args: &[JsValue]) -> JsValue {
+        js_sys::Reflect::get(this, &JsValue::from_str(name))
+            .ok()
+            .and_then(|f| f.dyn_into::<js_sys::Function>().ok())
+            .and_then(|f| f.apply(this, &args.iter().collect::<js_sys::Array>()).ok())
+            .unwrap_or(JsValue::UNDEFINED)
+    }
+
+    fn translate(dx: f64, dy: f64) -> JsValue {
+        JsValue::from_str(&format!("translate({dx}px, {dy}px)"))
+    }
+
+    /// Fade in where it stands.
+    pub fn enter(el: &Element, o: Tween) -> Self {
+        Self::tween(
+            el,
+            &[&[("opacity", 0.into())], &[("opacity", 1.into())]],
+            o.over(Tween::default().ease(Ease::ENTER)),
+        )
+    }
+
+    /// Fade out where it stands, then remove it.
+    pub fn exit(el: &Element, o: Tween) -> Self {
+        let from = web_sys::window()
+            .and_then(|w| w.get_computed_style(el).ok().flatten())
+            .and_then(|cs| cs.get_property_value("opacity").ok())
+            .unwrap_or_default();
+        let fade = Self::tween(
+            el,
+            &[&[("opacity", JsValue::from_str(&from))], &[("opacity", 0.into())]],
+            o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::EXIT)).keep(),
+        );
+        let el = el.clone();
+        Self::seq(vec![fade, Self::act(move || el.remove())])
+    }
+
+    /// Play back from an offset to where layout put it (FLIP).
+    pub fn slide(el: &Element, dx: f64, dy: f64, o: Tween) -> Self {
+        if dx.abs() < 0.5 && dy.abs() < 0.5 {
+            return Self::none();
+        }
+        Self::tween(
+            el,
+            &[
+                &[("transform", Self::translate(dx, dy))],
+                &[("transform", "none".into())],
+            ],
+            o,
+        )
+    }
+
+    /// Grow or shrink its box between two rects.
+    pub fn resize(el: &Element, from: &DomRect, to: &DomRect, o: Tween) -> Self {
+        if (from.width() - to.width()).abs() < 0.5 && (from.height() - to.height()).abs() < 0.5 {
+            return Self::none();
+        }
+        let px = |v: f64| JsValue::from_str(&format!("{v}px"));
+        Self::tween(
+            el,
+            &[
+                &[("width", px(from.width())), ("height", px(from.height()))],
+                &[("width", px(to.width())), ("height", px(to.height()))],
+            ],
+            o,
+        )
+    }
+
+    /// Stroke an SVG path from start to end (it needs `pathLength="1"` and a dash array of 1).
+    pub fn draw(path: &Element, o: Tween) -> Self {
+        Self::tween(
+            path,
+            &[&[("strokeDashoffset", 1.into())], &[("strokeDashoffset", 0.into())]],
+            o.over(Tween::default().ease(Ease::ENTER)),
+        )
+    }
+
+    /// Travel in a straight line by (dx, dy) and stay there.
+    pub fn fly(el: &Element, dx: f64, dy: f64, o: Tween) -> Self {
+        Self::tween(
+            el,
+            &[
+                &[("transform", "none".into())],
+                &[("transform", Self::translate(dx, dy))],
+            ],
+            o.keep(),
+        )
+    }
+
+    /// `a` fades out while `b` fades in; both stay.
+    pub fn crossfade(a: &Element, b: &Element, o: Tween) -> Self {
+        let o = o.over(Tween::default().ms(Self::BEAT * 0.45).ease(Ease::EXIT)).keep();
+        Self::all(vec![
+            Self::tween(a, &[&[("opacity", 1.into())], &[("opacity", 0.into())]], o),
+            Self::tween(b, &[&[("opacity", 0.into())], &[("opacity", 1.into())]], o),
+        ])
+    }
+
+    /// Play together.
+    pub fn all(ms: Vec<Motion>) -> Self {
+        Self::new(move |clock| Box::pin(Join::new(ms.into_iter().map(|m| m.play(clock)).collect())))
+    }
+
+    /// Play one after another.
+    pub fn seq(ms: Vec<Motion>) -> Self {
+        Self::new(move |clock| {
+            let mut rest = ms.into_iter();
+            let first = rest.next().map(|m| m.play(clock));
+            Box::pin(async move {
+                if let Some(f) = first {
+                    f.await;
+                }
+                for m in rest {
+                    m.play(clock).await;
+                }
+            })
+        })
+    }
+
+    /// Start `m` after a delay.
+    pub fn after(ms: f64, m: Motion) -> Self {
+        if ms <= 0.0 {
+            return m;
+        }
+        Self::new(move |clock| {
+            Box::pin(async move {
+                Self::wait(clock.scale(ms)).await;
+                m.play(clock).await;
+            })
+        })
+    }
+
+    /// Play together, each one `gap` later than the one before; a gap in the list still counts.
+    pub fn stagger(gap: f64, ms: Vec<Option<Motion>>) -> Self {
+        Self::all(
+            ms.into_iter()
+                .enumerate()
+                .filter_map(|(i, m)| m.map(|m| Self::after(i as f64 * gap, m)))
+                .collect(),
+        )
+    }
+
+    /// A side effect at a point in a sequence.
+    pub fn act<F>(f: F) -> Self
+    where
+        F: FnOnce() + 'static,
+    {
+        Self::new(move |_| {
+            f();
+            Box::pin(async {})
+        })
+    }
+}

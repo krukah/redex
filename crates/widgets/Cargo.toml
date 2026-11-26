@@ -19,9 +19,37 @@ layout = { workspace = true }
 examples = { workspace = true }
 motion = { workspace = true }
 leptos = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+  "CssStyleDeclaration",
+  "Document",
+  "DomRect",
+  "DomStringMap",
+  "DomTokenList",
+  "Element",
+  "Event",
+  "EventTarget",
+  "FontFaceSet",
+  "HtmlElement",
+  "HtmlButtonElement",
+  "HtmlDetailsElement",
+  "HtmlInputElement",
+  "HtmlTextAreaElement",
+  "KeyboardEvent",
+  "MouseEvent",
+  "FocusEvent",
+  "NodeList",
+  "ResizeObserver",
+  "ScrollIntoViewOptions",
+  "ScrollBehavior",
+  "ScrollLogicalPosition",
+  "SvgElement",
+  "Window",
+] }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }

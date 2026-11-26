@@ -4,9 +4,70 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Redex Workbench</title>
+  <meta name="description" content="Fire α, β, η, δ, ζ, ι and π redexes by hand, see every reduction path as a graph, and race evaluation strategies.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
   <link data-trunk rel="css" href="site.css">
   <link data-trunk rel="css" href="../../crates/widgets/redex.css">
   <link data-trunk rel="rust" href="Cargo.toml" data-bin="page" data-wasm-opt="z">
 </head>
-<body></body>
+<body>
+  <header class="site"><a href="#top">Redex Workbench</a></header>
+
+  <main id="top">
+    <div class="content">
+      <h1>Redex Workbench</h1>
+      <p class="lede">Lean decides that two terms are equal by rewriting them until they match. Each kind of rewrite has a Greek letter, and each one replaces a term with another that means the same thing. This page lets you fire them by hand.</p>
+
+      <section id="workbench">
+        <h2>Workbench</h2>
+        <p>A <em>redex</em> is a part of a term that a rule can rewrite. Pick a rule or an example to load it into the workbench. Each example’s thumbnail is its whole reduction graph in miniature (section 2).</p>
+        <p>Each box is one piece of syntax: a <b>λ</b> box with its binder on a tab, an application box with the function first and its arguments after it, a pair box. A variable is a tag in the color of the binder it belongs to, and the arcs above link each one to that binder.</p>
+        <p>A badge on a box’s corner marks a redex. Hover it to see the rule match: the rule’s pattern variables and the pieces of the term they stand for get the same highlighter color. Click it and each piece moves to where the result uses it. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head, and <b>Normalize</b> runs until no redex is left.</p>
+        <div data-redex="rules"></div>
+        <div data-redex="workbench" data-example="beta"></div>
+      </section>
+
+      <section id="paths">
+        <h2>Every path</h2>
+        <p>A term with several redexes can reduce in several orders. The graph shows all of them at once. When two paths split, they can always be joined again (the Church–Rosser theorem), so a term has at most one normal form.</p>
+        <p>Each row is a number of steps from the start. A circle is a term that can still reduce at its head, a diamond is in weak head normal form, and a filled square is a normal form. The number beside a mark is the term’s size. Hover a mark to read the term, and pick a route to see which path a strategy takes.</p>
+        <div data-redex="graph"></div>
+      </section>
+
+      <section id="strategies">
+        <h2>Strategies</h2>
+        <p>A strategy is a rule for choosing the next redex. Normal order finds the normal form whenever one exists. Applicative order evaluates arguments first, which saves work when an argument is used many times and loops when a looping argument is never used.</p>
+        <p>Every term is a <em>head</em> applied to zero or more arguments: in <code>f a b</code> the head is <code>f</code>. A term is in <em>weak head normal form</em> when no rule can change its head: the head is a variable (<code>a ((λy. y) a)</code>), a constructor (<code>succ (…)</code>, <code>(…, …)</code>), or a λ with no arguments (<code>λx. …</code>). The arguments and the inside of the λ may still hold redexes. That is enough to answer “what shape is this term?”, which is all Lean’s <code>whnf</code> asks before it compares two heads or picks a branch of a recursor.</p>
+        <div data-redex="race"></div>
+      </section>
+
+      <section id="lean">
+        <h2>In Lean 4</h2>
+        <dl class="rules-in-lean">
+          <dt><span class="g" style="color:var(--rdx-alpha)">α</span>Nothing to do</dt>
+          <dd>Bound variables are de Bruijn indices (<code>Expr.bvar</code>), so α-equivalent terms are the same <code>Expr</code>. Binder names are kept only for display. The workbench’s “de Bruijn” toggle shows this.</dd>
+          <dt><span class="g" style="color:var(--rdx-beta)">β</span>Always on</dt>
+          <dd>Every definitional equality check and <code>dsimp</code> uses it. Force it with <code>beta_reduce</code> (Mathlib). simp flag <code>beta</code>.</dd>
+          <dt><span class="g" style="color:var(--rdx-eta)">η</span>Used to compare, never to compute</dt>
+          <dd><code>rfl</code> proves <code>(fun x =&gt; f x) = f</code> and <code>p = (p.1, p.2)</code>. simp flags <code>eta</code> and <code>etaStruct</code>. Mathlib: <code>eta_reduce</code>.</dd>
+          <dt><span class="g" style="color:var(--rdx-delta)">δ</span>Controlled by transparency</dt>
+          <dd><code>unfold f</code>, <code>delta f</code>, <code>simp [f]</code>. The attributes <code>@[reducible]</code> and <code>@[irreducible]</code> decide what unfolds automatically.</dd>
+          <dt><span class="g" style="color:var(--rdx-zeta)">ζ</span>Inline a let</dt>
+          <dd>simp flag <code>zeta</code>. <code>zetaDelta</code> also unfolds let-bound hypotheses <code>x : α := v</code>. <code>intro x</code> moves a <code>let</code> into the context.</dd>
+          <dt><span class="g" style="color:var(--rdx-iota)">ι</span>Computation</dt>
+          <dd><code>rfl</code> and <code>decide</code> run on it. simp flag <code>iota</code>. It gets stuck on well-founded recursion; use <code>unfold f</code> or <code>f.eq_def</code> there.</dd>
+          <dt><span class="g" style="color:var(--rdx-proj)">π</span>Projections</dt>
+          <dd><code>Expr.proj</code> reduces when its argument is a constructor application. simp flag <code>proj</code>. Coq counts this as part of ι.</dd>
+          <dt><span class="g">⇥</span>WHNF and full normal form</dt>
+          <dd><code>whnf</code> (Mathlib tactic) reduces the head only, like the third strategy lane. <code>#reduce t</code> prints the full normal form.</dd>
+        </dl>
+        <p class="note">Lean’s kernel also has rules this page does not model: <code>Quot.lift f h (Quot.mk r a) ⟶ f a</code>, K-like reduction of <code>Eq.rec</code>, GMP arithmetic on <code>Nat</code> literals, proof irrelevance, and η for unit-like structures.</p>
+      </section>
+
+    </div>
+  </main>
+
+</body>
 </html>

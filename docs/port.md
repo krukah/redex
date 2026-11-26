@@ -92,3 +92,40 @@ Decisions
   keeps the JS operation order, since the strings must match to the last digit.
 - `playwright-core` is installed with `--no-save`: `package.json` stays as it was, and the
   dependency disappears with the JS at cutover.
+
+## 3. Motion and blocks — done
+
+- `motion`: `Motion` (a boxed `FnOnce(Clock) -> Future`), the primitives `enter` `exit` `slide`
+  `resize` `fly` `crossfade` `draw`, the compositions `all` `seq` `after` `stagger` `act`, `Clock`,
+  `Ease`, `Tween` options, `Ghost` (pin and `delta`). Constants and composition structure are the
+  JS's: `BEAT` 620, exit 0.55 beat, crossfade 0.45 beat, the timer race at `delay + duration + 60`.
+- `widgets`: `Blocks` renders the blocks markup; `tests/blocks.rs` matches every `blocks` and
+  `debruijn` string in `fixtures/engine` (parsed terms, definitions, every one-step result) byte for
+  byte, ids rebased. `Session` is the JS session's state and synchronous listener list, shared by
+  context. `Mount::all` mounts every `[data-redex]` element with `leptos::mount::mount_to`.
+- `bin/page/index.html` is the JS `index.html` with Trunk links in place of the stylesheets and the
+  module script. The page renders the workbench's blocks line; its DOM equals the JS page's after
+  rebasing ids (`scripts/parity.mjs`, which screenshots both pages in headless Chrome and diffs each
+  widget's DOM).
+
+Decisions
+
+- **Widgets render their term regions as markup strings, not per-node Leptos views.** The JS
+  rebuilds a region's `innerHTML` on every change and its FLIP animation depends on that: it lifts
+  ghosts from the old DOM, swaps the markup, then measures the new DOM. Leptos owns each widget's
+  skeleton (controls, toggles, regions, `NodeRef`s, events); the term-shaped regions (blocks line,
+  trace, status, rule card, graph SVG, lanes) are pure string renderers, tested natively against
+  the JS output, and set with `set_inner_html`. Element continuity during motion comes from ghosts,
+  exactly as in the JS.
+- **The session notifies synchronously**, not through signals. The workbench pushes a step and
+  measures the re-rendered DOM in the same tick (`moveTo` right after `session.push`); a Leptos
+  effect would run a microtask later. `Session` keeps the JS listener list; the context holds a
+  `StoredValue<Session, LocalStorage>` (context values must be `Send + Sync`).
+- `Element::animate` is behind web-sys's unstable APIs; `motion` calls it (and `cancel`,
+  `finished`) through `js_sys::Reflect` rather than build with `--cfg web_sys_unstable_apis`.
+- Futures: `Settle` (a promise as a future), `Join` and `Race` are written in `motion` instead of
+  adding `futures` or `wasm-bindgen-futures` as dependencies. Primitives start their animation when
+  played, synchronously, as the JS does.
+- `widgets` keeps pub fields on `State` and `Entry` (the crate is exempt from `pub-field`).
+
+Size: 75.5 KB gzipped (engine, Leptos, blocks).

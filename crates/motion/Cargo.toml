@@ -9,10 +9,20 @@ publish.workspace      = true
 description  = "Motion algebra over the Web Animations API"
 
 [dependencies]
-web-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
-js-sys = { workspace = true }
-gloo-timers = { workspace = true }
+js-sys       = { workspace = true }
+gloo-timers  = { workspace = true }
+web-sys      = { workspace = true, features = [
+  "CssStyleDeclaration",
+  "Document",
+  "DomRect",
+  "DomTokenList",
+  "Element",
+  "HtmlElement",
+  "MediaQueryList",
+  "Node",
+  "Window",
+] }
 
 [lints]
 workspace = true
