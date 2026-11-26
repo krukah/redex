@@ -129,3 +129,32 @@ Decisions
 - `widgets` keeps pub fields on `State` and `Entry` (the crate is exempt from `pub-field`).
 
 Size: 75.5 KB gzipped (engine, Leptos, blocks).
+
+## 4. Workbench — done
+
+`widgets/src/workbench.rs` ports `workbench.js` function for function (`render`, `matched`, `paint`,
+`show_rule`, `lift`, `move_to`, `travel`, `glide`, `fire_at`, `run`, `rename`, …) on a `Bench`
+that holds the session, an anchor `NodeRef` and the widget's local state; `Doc` holds the DOM
+helpers and `drawArcs`. One firing grammar: nothing in the move is rule-specific.
+
+Parity (`scripts/parity.mjs`, canonical DOM: attributes sorted, whitespace text dropped, ids
+numbered by first appearance), reduced motion and full motion, final states: load, hover a badge,
+Step, Normalize, the automatic α before a capturing β (capture panel included), rename a binder,
+de Bruijn, Back, trace click, ←/→ keys, a parse error, δ hover (definitions list), Ω under
+Normalize (stops on the loop). The workbench DOM, binding-link SVG included, is identical in all.
+Mid-firing (300, 800, 1000 ms after a click) the ghosts are the same set with the same markup and
+inherited text settings; only their page offsets differ, because the deck above the workbench is
+not ported yet.
+
+Decisions
+
+- `Doc` (not `Dom`, which `leptos::prelude` exports).
+- Ghost styles are written through `style.cssText`, as the JS does, so the browser normalizes them
+  the same way.
+- Static markup is in `view!`; the canonical-DOM diff ignores attribute order, which Leptos
+  changes (`class` first) and which means nothing to CSS.
+- `run` and `fire_once` start through `leptos::task::spawn_local`, a microtask later than the JS's
+  synchronous start of an async function. Nothing observable sits between the click and that
+  microtask.
+
+Size:  KB gzipped.

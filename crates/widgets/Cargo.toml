@@ -20,7 +20,12 @@ examples = { workspace = true }
 motion = { workspace = true }
 leptos = { workspace = true }
 web-sys = { workspace = true, features = [
+  "css",
   "CssStyleDeclaration",
+  "HtmlCollection",
+  "HtmlLiElement",
+  "HtmlOListElement",
+  "FontFaceSet",
   "Document",
   "DomRect",
   "DomStringMap",
@@ -28,7 +33,6 @@ web-sys = { workspace = true, features = [
   "Element",
   "Event",
   "EventTarget",
-  "FontFaceSet",
   "HtmlElement",
   "HtmlButtonElement",
   "HtmlDetailsElement",

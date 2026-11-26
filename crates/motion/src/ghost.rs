@@ -42,7 +42,9 @@ impl Ghost {
             r.height(),
             if hidden { ";opacity:0" } else { "" }
         );
-        let _ = w.set_attribute("style", &css);
+        if let Ok(style) = js_sys::Reflect::get(&w, &"style".into()) {
+            let _ = js_sys::Reflect::set(&style, &"cssText".into(), &css.into());
+        }
         let copy = el.clone_node_with_deep(true).ok()?.dyn_into::<Element>().ok()?;
         let _ = copy.class_list().remove_3("hot", "soft", "arriving");
         mark.iter().for_each(|m| {
