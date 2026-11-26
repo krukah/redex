@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  format:
+    name: Rust Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  lint-and-test:
+    name: Clippy & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+
+  # The JS engine is the spec until cutover: the fixtures must be what it writes.
+  golden:
+    name: Golden fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test
+      - run: node scripts/golden.mjs && git diff --exit-code fixtures
+
+  page:
+    name: Trunk build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+      - run: trunk build --release
+      - name: Gzipped wasm size
+        run: for f in dist/*.wasm; do echo "$f $(gzip -9c "$f" | wc -c) bytes gzipped"; done
+
+  house-lint:
+    name: House Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history so the merge base with the target branch resolves.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # lints sits outside the workspace, so it gets its own cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/lints
+      - name: Rust Format (lints)
+        run: cargo fmt --manifest-path crates/lints/Cargo.toml --check
+      - name: Clippy (lints)
+        run: cargo clippy --manifest-path crates/lints/Cargo.toml --all-targets -- -D warnings
+      - name: House Lint
+        run: cargo run --manifest-path crates/lints/Cargo.toml -- --base origin/${{ github.base_ref || 'master' }}

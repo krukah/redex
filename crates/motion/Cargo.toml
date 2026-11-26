@@ -1,0 +1,18 @@
+[package]
+name         = "motion"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+description  = "Motion algebra over the Web Animations API"
+
+[dependencies]
+web-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+gloo-timers = { workspace = true }
+
+[lints]
+workspace = true

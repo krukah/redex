@@ -1,0 +1,16 @@
+[package]
+name         = "rules"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+description  = "The seven rules: redex search, schemas, bindings, contraction"
+
+[dependencies]
+term = { workspace = true }
+subst = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+[package]
+name         = "widgets"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+description  = "Leptos widgets: blocks, rules deck, workbench, graph, race, session"
+
+[dependencies]
+term = { workspace = true }
+subst = { workspace = true }
+syntax = { workspace = true }
+rules = { workspace = true }
+strategy = { workspace = true }
+explore = { workspace = true }
+layout = { workspace = true }
+examples = { workspace = true }
+motion = { workspace = true }
+leptos = { workspace = true }
+web-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+
+[lints]
+workspace = true

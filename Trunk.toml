@@ -1,0 +1,10 @@
+[build]
+target              = "bin/page/index.html"
+dist                = "dist"
+
+[watch]
+watch               = ["./crates", "./bin/page"]
+
+[serve]
+port                = 8001
+open                = false
