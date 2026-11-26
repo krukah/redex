@@ -1,4 +1,5 @@
 mod blocks;
+mod deck;
 mod doc;
 mod html;
 mod mount;
@@ -6,6 +7,7 @@ mod session;
 mod workbench;
 
 pub use blocks::*;
+pub use deck::*;
 pub use doc::*;
 pub use html::*;
 pub use mount::*;

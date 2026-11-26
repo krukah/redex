@@ -18,6 +18,7 @@ explore = { workspace = true }
 layout = { workspace = true }
 examples = { workspace = true }
 motion = { workspace = true }
+gloo-timers = { workspace = true }
 leptos = { workspace = true }
 web-sys = { workspace = true, features = [
   "css",

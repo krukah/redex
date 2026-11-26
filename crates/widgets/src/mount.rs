@@ -30,6 +30,7 @@ impl Mount {
             let handle = leptos::mount::mount_to(el.clone(), move || {
                 provide_context(stored);
                 match kind.as_str() {
+                    "rules" => view! { <Deck/> }.into_any(),
                     "workbench" => view! { <Workbench/> }.into_any(),
                     _ => ().into_any(),
                 }
