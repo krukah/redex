@@ -339,6 +339,7 @@ dependencies = [
 name = "examples"
 version = "0.1.0"
 dependencies = [
+ "rules",
  "syntax",
 ]
 
@@ -346,7 +347,12 @@ dependencies = [
 name = "explore"
 version = "0.1.0"
 dependencies = [
+ "examples",
  "rules",
+ "serde_json",
+ "strategy",
+ "subst",
+ "syntax",
  "term",
 ]
 

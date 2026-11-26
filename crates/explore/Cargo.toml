@@ -14,3 +14,10 @@ rules = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+syntax     = { workspace = true }
+subst      = { workspace = true }
+strategy   = { workspace = true }
+serde_json = { workspace = true }
+examples   = { workspace = true }

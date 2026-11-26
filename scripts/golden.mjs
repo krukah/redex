@@ -113,6 +113,8 @@ const ERRORS = [
   'λ. x', '(a, b', 'λx y', 'let x := a b', 'let := a; b', 'a )', '41', 'x # y', '', 'def zero := a\nzero',
   'def k := λ. x\nk', '-- only a note', 'fun x => ', '(a, b).3', 'p.12', 'a.1.2', 'λx => x', 'let x := a in x',
   'Nat.succ Nat.zero', 'f.g x', 'Foo.bar.baz y', 'x₁ y₂', 'λx. λx. x', '\\x. x', 'x ↦ y', '(λx ↦ x) a',
+  'def toString := a\nb', 'def constructor := a\nb', '-- note\r\nx', 'def a\r:= b\na', 'def k:=λx. x\nk y',
+  '  def   k :=  z\nk', 'def k := a\ndef k := b\nk', 'let 5 := a; b', '99999999999999999999999 x', 'a.1.12', 'x.2.1',
 ];
 
 rmSync(OUT, { recursive: true, force: true });
@@ -124,5 +126,5 @@ const cases = [
   ...Array.from({ length: 80 }, (_, i) => ['random', String(i + 1), randomSource(i + 1), (i % 3) === 0]),
 ];
 for (const [group, id, src, eta] of cases) write(`${group}-${id}`, study(`${group}-${id}`, src, eta));
-write('errors', ERRORS.map(src => study('error', src, false)).map(({ src, error, text }) => ({ src, error: error ?? null, text: text ?? null })));
+write('errors', ERRORS.map(src => study('error', src, false)).map(({ src, error, text, notes, env }) => ({ src, error: error ?? null, text: text ?? null, notes: notes ?? null, defs: env ? env.map(d => [d.name, d.text]) : null })));
 console.log(`wrote ${cases.length + 1} fixtures to ${OUT.pathname}`);

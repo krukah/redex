@@ -38,3 +38,38 @@ Decisions
 - Trunk serves on port 8001 so the JS page (`npm run serve`, 8000) can run beside it.
 
 Size: 8.5 KB gzipped (empty page).
+
+## 1. Engine — done
+
+`term`, `subst`, `syntax`, `rules`, `strategy`, `explore` (and `examples`, which the ported engine
+tests need). `crates/explore/tests/golden.rs` checks every fixture key the engine produces (all but
+the blocks HTML, which is `widgets`' and comes in milestone 3) and the parser error copy;
+`crates/explore/tests/engine.rs` ports `test/engine.test.js` case for case. All pass, uids
+included: allocation order matches the JS engine node for node.
+
+Decisions
+
+- `Term` is `Rc<Node>`; `from`, `mark` and `cap` sit in `Cell`s. The JS workbench mutates them
+  (`stripMarks` after the first render, `tagFree` on fresh copies) on nodes that history entries
+  share, so immutable decorations would change what a revisited history entry shows.
+- Uids and the constant set (`CONSTS`, which `session.load` grows with every defined name and
+  `fresh` avoids) are per-thread globals, as in the JS. Uid numbering is part of the spec.
+- `Env` lives in `term`, not `rules`: `syntax` needs it to resolve names and must not depend on
+  `rules`. `examples` depends on `rules` for `Kind`.
+- Helpers that the JS keeps as module functions hang on traits over `Term`: `Substitute` (subst),
+  `Print` (syntax), `Reduce` (rules). Their private helpers are trait methods too, since a second
+  trait in the file would break one-type-per-file.
+- `term::Number` prints numbers as JavaScript does (`String(x)`, `toFixed`), for error copy now and
+  SVG coordinates later; tested against node's output.
+
+JS behaviour ported as-is (looks like a bug)
+
+- `def toString := …` (or any `Object.prototype` member name) is rejected as "built in", because
+  the JS checks `ALIAS[name]` on a plain object. Covered by the error fixtures.
+- A `\r` before a line's end defeats the `def` and `--` regexes (`.` does not match it), so with
+  CRLF sources notes and definitions fall into the body. Ported, fixture-covered.
+- The tokenizer walks UTF-16 code units, so an astral character is reported as half a surrogate
+  pair in "Unexpected character". Rust reports the whole character. Not reproducible in a Rust
+  `String`; the only gap, and only in an error message.
+
+Size: unchanged (engine not linked into the page yet).

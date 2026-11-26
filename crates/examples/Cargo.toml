@@ -10,6 +10,7 @@ description  = "Example and race programs"
 
 [dependencies]
 syntax = { workspace = true }
+rules = { workspace = true }
 
 [lints]
 workspace = true
