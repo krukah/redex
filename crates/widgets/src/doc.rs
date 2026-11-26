@@ -7,6 +7,17 @@ use web_sys::Element;
 pub struct Doc;
 
 impl Doc {
+    /// A page-wide counter for ids that must be unique in the document (SVG marker ids).
+    pub fn next_id() -> u64 {
+        thread_local! {
+            static NEXT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+        }
+        NEXT.with(|n| {
+            n.set(n.get() + 1);
+            n.get()
+        })
+    }
+
     pub fn q(root: &Element, sel: &str) -> Option<Element> {
         root.query_selector(sel).ok().flatten()
     }

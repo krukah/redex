@@ -3,6 +3,7 @@ mod deck;
 mod doc;
 mod html;
 mod mount;
+mod paths;
 mod session;
 mod workbench;
 
@@ -11,5 +12,6 @@ pub use deck::*;
 pub use doc::*;
 pub use html::*;
 pub use mount::*;
+pub use paths::*;
 pub use session::*;
 pub use workbench::*;

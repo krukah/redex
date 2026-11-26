@@ -32,6 +32,7 @@ impl Mount {
                 match kind.as_str() {
                     "rules" => view! { <Deck/> }.into_any(),
                     "workbench" => view! { <Workbench/> }.into_any(),
+                    "graph" => view! { <Paths/> }.into_any(),
                     _ => ().into_any(),
                 }
             });
