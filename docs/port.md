@@ -157,4 +157,4 @@ Decisions
   synchronous start of an async function. Nothing observable sits between the click and that
   microtask.
 
-Size:  KB gzipped.
+Size: 125.6 KB gzipped (the workbench brings in more of Leptos and web-sys).
