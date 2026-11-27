@@ -41,21 +41,6 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-  # The JS engine is the spec until cutover: the fixtures must be what it writes.
-  golden:
-    name: Golden fixtures
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node --test
-      - run: node scripts/golden.mjs && git diff --exit-code fixtures
-      - run: npm i --no-save playwright-core
-      - run: node scripts/golden-dom.mjs "$(which google-chrome)" && git diff --exit-code fixtures
-
   page:
     name: Trunk build
     runs-on: ubuntu-latest
@@ -96,3 +81,33 @@ jobs:
         run: cargo clippy --manifest-path crates/lints/Cargo.toml --all-targets -- -D warnings
       - name: House Lint
         run: cargo run --manifest-path crates/lints/Cargo.toml -- --base origin/${{ github.base_ref || 'master' }}
+      # Every rule, every file, the opt-in rules included: the standing count is zero.
+      - name: House Lint (all)
+        run: |
+          cargo run --manifest-path crates/lints/Cargo.toml -- --all
+          for rule in forwarding-closure type-hint inline-bound field-access; do
+            cargo run --manifest-path crates/lints/Cargo.toml -- --all --only "$rule"
+          done
+
+  # The host-page build, and the browser check of two widget groups on one page.
+  embed:
+    name: Site build & reveal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen pinned to Cargo.lock, and binaryen
+        run: |
+          version=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print }' Cargo.lock)
+          cargo install wasm-bindgen-cli --version "$version" --locked
+          sudo apt-get update && sudo apt-get install -y binaryen
+      - run: ./scripts/site.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node scripts/reveal.mjs "$(which google-chrome)"
