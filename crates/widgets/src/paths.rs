@@ -612,8 +612,8 @@ impl Board {
         } else {
             Px::new(r.top() - wrap.top()) - th - Px::new(6.0)
         };
-        let _ = tip.style().set_property("left", &format!("{left}px"));
-        let _ = tip.style().set_property("top", &format!("{top}px"));
+        Prop::Left.set(&tip, &format!("{left}px"));
+        Prop::Top.set(&tip, &format!("{top}px"));
     }
 
     fn open(&self, i: Id) {
@@ -638,15 +638,8 @@ impl Board {
             }
             _ => {}
         }
-        if let Some(route) =
-            Doc::closest(&target, &Query::Has(Data::Route)).and_then(|r| r.get_attribute(Data::Route.name()))
-        {
-            self.route().set(
-                Chart::ROUTES
-                    .into_iter()
-                    .find(|r| r.map_or("none", Strategy::id) == route)
-                    .flatten(),
-            );
+        if let Some(pill) = Doc::closest(&target, &Query::Has(Data::Route)) {
+            self.route().set(Doc::read::<Strategy>(&pill, Data::Route));
             self.render_routes();
         }
     }

@@ -733,10 +733,7 @@ impl Bench {
         if let Some(husk) = &husk {
             Doc::all(husk, &Query::Has(Data::Piece))
                 .iter()
-                .filter_map(|e| e.dyn_ref::<web_sys::HtmlElement>().cloned())
-                .for_each(|e| {
-                    let _ = e.style().set_property("visibility", "hidden");
-                });
+                .for_each(|e| Prop::Visibility.set(e, &"hidden"));
         }
         Lifted {
             husk,

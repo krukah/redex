@@ -92,3 +92,11 @@ impl Strategy {
         }
     }
 }
+
+impl std::str::FromStr for Strategy {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL.into_iter().find(|k| k.id() == s).ok_or(())
+    }
+}

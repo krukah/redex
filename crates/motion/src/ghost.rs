@@ -1,4 +1,6 @@
 use markup::*;
+
+use crate::*;
 use units::*;
 use wasm_bindgen::JsCast;
 use web_sys::DomRect;
@@ -58,13 +60,9 @@ impl Ghost {
         mark.iter().for_each(|m| {
             let _ = copy.class_list().add_1(&m.to_string());
         });
-        if let Ok(style) =
-            js_sys::Reflect::get(&copy, &"style".into()).and_then(JsCast::dyn_into::<web_sys::CssStyleDeclaration>)
-        {
-            let _ = style.set_property("width", &format!("{}px", r.width()));
-            let _ = style.set_property("height", &format!("{}px", r.height()));
-            let _ = style.set_property("flex", "none");
-        }
+        Prop::Width.set(&copy, &format!("{}px", Px::new(r.width())));
+        Prop::Height.set(&copy, &format!("{}px", Px::new(r.height())));
+        Prop::Flex.set(&copy, &"none");
         w.append_child(&copy).ok()?;
         doc.body()?.append_child(&w).ok()?;
         Some(w)
