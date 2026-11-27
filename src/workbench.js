@@ -393,6 +393,7 @@ export function mountWorkbench(root, session) {
   document.fonts?.ready.then(redraw);
 
   session.on(type => {
+    if (type === 'reveal') { root.scrollIntoView({ behavior: motion() ? 'smooth' : 'auto', block: 'start' }); return; }
     if (type === 'load') { W.note = ''; renderSource(); }
     render();
   });

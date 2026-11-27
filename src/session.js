@@ -1,5 +1,5 @@
 // Shared state for every widget on a page: the loaded program and the reduction history.
-// Widgets render from it and call its methods; it notifies them with 'load' or 'step'.
+// Widgets render from it and call its methods; it notifies them with 'load', 'step' or 'reveal'.
 import { parseProgram, CONSTS, EMPTY } from './engine.js';
 import { EXAMPLES } from './examples.js';
 
@@ -45,5 +45,7 @@ export function createSession() {
     seek(i) { this.idx = i; this.emit('step'); },
     reset() { this.hist = [this.hist[0]]; this.idx = 0; this.capture = null; this.emit('step'); },
     replaceHistory(hist) { this.hist = hist; this.idx = hist.length - 1; this.capture = null; this.emit('step'); },
+    // Asks the workbench to bring itself into view, e.g. after the graph opened a term in it.
+    reveal() { this.emit('reveal'); },
   };
 }

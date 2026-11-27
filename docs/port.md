@@ -239,3 +239,9 @@ from one source, and each adds a case that fails before the fix and passes after
    UTF-16 code units and quoted half a surrogate pair; it now quotes the whole code point
    (`String.fromCodePoint(src.codePointAt(i))`), as the Rust always did. Cases: `x 😀 y`,
    `λ𝑥. 𝑥`; the Rust test failed against the old fixture and passes now.
+4. **The graph reached outside its own root** (`document.querySelector('[data-redex="workbench"]')`)
+   to scroll the workbench into view after "Open in workbench", so with two groups of widgets on
+   a page it scrolled the first group's workbench. The session now carries a `reveal` event; the
+   graph emits it and each workbench scrolls its own root. `scripts/reveal.mjs` mounts two groups
+   on one page and opens a term from the second group's graph: before the fix both engines left
+   the second workbench 3867 px down; after, it sits at the top, in the JS and the Rust.

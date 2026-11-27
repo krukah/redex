@@ -11,7 +11,7 @@
 import { KCLS, esc, exploreGraph, hasCycle, key, applicativeNext, normalNext, runStrategy, size, text, whnfNext } from './engine.js';
 import { renderBlocks } from './blocks.js';
 import { $$, nextId } from './dom.js';
-import { after, all, draw as drawIn, enter, motion } from './motion.js';
+import { after, all, draw as drawIn, enter } from './motion.js';
 
 const CAP = 70;                        // stop exploring after this many terms
 const GX = 46, ROWH = 58, R = 6;       // column pitch, row pitch, mark radius
@@ -201,7 +201,7 @@ export function mountGraph(root, session) {
     const chain = [];
     for (let k = G.byId[id].key; k;) { const m = G.nodes.get(k); chain.unshift(m); k = m.parent; }
     session.replaceHistory(chain.map((m, i) => ({ term: m.term, kind: i ? m.pkind : null })));
-    document.querySelector('[data-redex="workbench"]')?.scrollIntoView({ behavior: motion() ? 'smooth' : 'auto', block: 'start' });
+    session.reveal();
   }
 
   svg.addEventListener('mouseover', e => showTip(e.target.closest('.rdx-gn')));
@@ -224,6 +224,6 @@ export function mountGraph(root, session) {
 
   session.on(type => {
     if (type === 'load') { etaBox.checked = session.eta; build(session.start); }
-    else mark();
+    else if (type === 'step') mark();
   });
 }

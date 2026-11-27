@@ -986,10 +986,28 @@ impl Bench {
         self.local.borrow_mut().raf = window.request_animation_frame(frame.unchecked_ref()).unwrap_or(0);
     }
 
+    /// Scrolls the workbench to the top of the window.
+    fn reveal(&self) {
+        let opts = web_sys::ScrollIntoViewOptions::new();
+        opts.set_behavior(if Motion::enabled() {
+            web_sys::ScrollBehavior::Smooth
+        } else {
+            web_sys::ScrollBehavior::Auto
+        });
+        opts.set_block(web_sys::ScrollLogicalPosition::Start);
+        if let Some(root) = self.root() {
+            root.scroll_into_view_with_scroll_into_view_options(&opts);
+        }
+    }
+
     /// Listeners that outlive the view: the session, the keyboard, resizes and fonts.
     fn listen(self: &Rc<Self>) {
         let me = self.clone();
         self.session.on(move |e| {
+            if e == Event::Reveal {
+                me.reveal();
+                return;
+            }
             if e == Event::Load {
                 me.local.borrow_mut().note.clear();
                 me.render_source();

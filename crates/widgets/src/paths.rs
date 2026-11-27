@@ -520,19 +520,7 @@ impl Board {
             return;
         };
         self.session.replace_history(chain);
-        let bench = web_sys::window()
-            .and_then(|w| w.document())
-            .and_then(|d| d.query_selector("[data-redex=\"workbench\"]").ok().flatten());
-        if let Some(bench) = bench {
-            let opts = web_sys::ScrollIntoViewOptions::new();
-            opts.set_behavior(if Motion::enabled() {
-                web_sys::ScrollBehavior::Smooth
-            } else {
-                web_sys::ScrollBehavior::Auto
-            });
-            opts.set_block(web_sys::ScrollLogicalPosition::Start);
-            bench.scroll_into_view_with_scroll_into_view_options(&opts);
-        }
+        self.session.reveal();
     }
 
     fn click(&self, e: &web_sys::Event) {
@@ -583,7 +571,7 @@ pub fn Paths() -> impl IntoView {
                 eta.set_checked(me.session.state().eta);
             }
             me.build(&me.session.start());
-        } else {
+        } else if e == Event::Step {
             me.mark();
         }
     });

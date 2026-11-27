@@ -7,11 +7,13 @@ use rules::*;
 use syntax::*;
 use term::*;
 
-/// What changed: a new program, or a move through the history.
+/// What changed: a new program, a move through the history, or a request that the workbench bring
+/// itself into view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Load,
     Step,
+    Reveal,
 }
 
 /// One history entry: a term, the rule that produced it, and a note for the trace.
@@ -144,6 +146,10 @@ impl Session {
             s.capture = None;
         });
         self.emit(Event::Step);
+    }
+
+    pub fn reveal(&self) {
+        self.emit(Event::Reveal);
     }
 
     pub fn replace_history(&self, hist: Vec<Entry>) {
