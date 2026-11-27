@@ -306,11 +306,16 @@ Parity
 - `fixtures/engine` blocks HTML, thumbnails and every graph coordinate still match byte for byte
   (the typed renderer reproduces attribute order, `/>` on empty SVG elements, and `String(x)` /
   `toFixed(1)`).
-- `scripts/parity.mjs`, all 28 states × 2: identical canonical DOM in every widget and every
-  ghost, with one timing race: at 800 ms into a firing with motion on, the redex's husk can be
-  caught at the very end of its 341 ms fade in one engine and gone in the other (it matched in
-  two of three reruns).
+- `scripts/parity.mjs`, all 28 states × 2, final run: identical canonical DOM in 55 of 56. The one
+  difference is a timing race in "mid" with motion on (800 ms into a firing): one engine still
+  shows the fired redex's ghost while the other has removed it. Six isolated reruns of that state
+  all matched; it shows only when the whole suite runs. Screenshots: 34 of 56 pixel-identical; the
+  rest differ only where a CSS animation is mid-flight (motion on), or by 125–186 scattered
+  pixels around the fixed header's shadow (reduced motion), as before 6b.
+- `scripts/reveal.mjs` passes for both engines; `scripts/site.sh` builds and the host page
+  mounts.
 - `scripts/golden.mjs` and `scripts/golden-dom.mjs` reproduce the committed fixtures.
 
-Size: 170.3 KB gzipped (page), up from 155.2 KB: building DOM node by node pulls in more of
-web-sys than `innerHTML` did.
+Size: 170.3 KB gzipped (page), up from 155.2 KB; 192.8 KB for the site build (was 176.8 KB).
+Building DOM node by node, the typed tree and its renderer, and the selector type account for
+the growth.
