@@ -752,7 +752,7 @@ impl Bench {
     /// starts at once and ends with the move phase: the husk fades out, each piece flies to every
     /// node of the result built from it (or fades), the result fades in, and the context glides.
     /// A result drawn inside a larger box (a numeral absorbs its `succ`s) lands on that box.
-    fn move_to(self: &Rc<Self>, lifted: &Lifted, path: &Path) -> Motion {
+    fn move_to(self: &Rc<Self>, lifted: &Lifted, path: &Path, clock: Clock) -> Motion {
         let Some(result) = std::iter::successors(Some(path.clone()), |p| (*p != Path::root()).then(|| p.parent()))
             .find_map(|p| self.node(&p))
         else {
@@ -777,7 +777,7 @@ impl Bench {
                     .filter_map(|pc| Self::travel(pc, &result))
                     .collect(),
             ),
-            self.glide(lifted, &result),
+            self.glide(lifted, &result, clock),
         ])
     }
 
@@ -847,21 +847,28 @@ impl Bench {
 
     /// Boxes that enclose the result change size, nodes beside it slide, new context fades in,
     /// and the stage resizes. Binding links step aside until the layout settles.
-    fn glide(self: &Rc<Self>, lifted: &Lifted, result: &Element) -> Motion {
+    fn glide(self: &Rc<Self>, lifted: &Lifted, result: &Element, clock: Clock) -> Motion {
         let (Some(stage), Some(line)) = (self.stage(), self.line()) else {
             return Motion::none();
         };
-        let mut moves = lifted
-            .stage()
-            .map(|old| {
-                vec![Motion::resize(
-                    &stage,
-                    old,
-                    &stage.get_bounding_client_rect(),
-                    Schedule::part(Role::Glide),
-                )]
+        let boxes = std::iter::successors(result.parent_element(), |e| Doc::above(Some(e)))
+            .take_while(|e| *e != line)
+            .filter_map(|e| {
+                Some((lifted.layout().get(&Doc::read::<Uid>(&e, Data::Uid)?)?.clone(), e.get_bounding_client_rect(), e))
             })
-            .unwrap_or_default();
+            .chain(
+                lifted
+                    .stage()
+                    .map(|old| (old.clone(), stage.get_bounding_client_rect(), stage.clone())),
+            )
+            .collect::<Vec<(DomRect, DomRect, Element)>>();
+        let sized = Motion::begun(Box::pin(Join::new(
+            boxes
+                .iter()
+                .map(|(old, now, e)| Motion::resize(e, old, now, Schedule::part(Role::Glide)).play(clock))
+                .collect(),
+        )));
+        let mut moves = vec![sized];
         Self::visit(&line, lifted.layout(), result, &mut moves);
         Doc::add(&stage, &[Class::Gliding]);
         let me = self.clone();
@@ -877,6 +884,9 @@ impl Bench {
         ])
     }
 
+    /// Slides every node beside the result from where it was to where it is, measured once the boxes
+    /// around the result are back at their old sizes, so a slide starts exactly where the node was
+    /// seen; a node new to the context fades in.
     fn visit(parent: &Element, before: &HashMap<Uid, DomRect>, result: &Element, moves: &mut Vec<Motion>) {
         for c in Doc::children(parent) {
             if &c == result {
@@ -886,23 +896,22 @@ impl Bench {
                 Self::visit(&c, before, result, moves);
                 continue;
             };
-            let (old, now) = (before.get(&uid), c.get_bounding_client_rect());
             if c.contains(Some(result)) {
-                moves.extend(old.map(|old| Motion::resize(&c, old, &now, Schedule::part(Role::Glide))));
                 Self::visit(&c, before, result, moves);
-            } else {
-                moves.push(old.map_or_else(
-                    || Motion::enter(&c, Schedule::part(Role::Glide)),
-                    |old| {
-                        Motion::slide(
-                            &c,
-                            Px::new(old.left() - now.left()),
-                            Px::new(old.top() - now.top()),
-                            Schedule::part(Role::Glide),
-                        )
-                    },
-                ));
+                continue;
             }
+            let now = c.get_bounding_client_rect();
+            moves.push(before.get(&uid).map_or_else(
+                || Motion::enter(&c, Schedule::part(Role::Glide)),
+                |old| {
+                    Motion::slide(
+                        &c,
+                        Px::new(old.left() - now.left()),
+                        Px::new(old.top() - now.top()),
+                        Schedule::part(Role::Glide),
+                    )
+                },
+            ));
         }
     }
 
@@ -989,7 +998,7 @@ impl Bench {
         ));
         if let Some(lifted) = lifted {
             Cue::Move.mark();
-            leptos::task::spawn_local(self.move_to(&lifted, &path).play(schedule.clock()));
+            leptos::task::spawn_local(self.move_to(&lifted, &path, schedule.clock()).play(schedule.clock()));
             schedule.until(start, Phase::Move).await;
             Cue::Moved.mark();
             schedule.until(start, Phase::Settle).await;

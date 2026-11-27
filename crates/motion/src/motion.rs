@@ -24,6 +24,11 @@ impl Motion {
         Self(Box::new(play))
     }
 
+    /// A motion already playing, to compose with others that start later.
+    pub fn begun(play: Pin<Box<dyn Future<Output = ()>>>) -> Self {
+        Self::new(move |_| play)
+    }
+
     pub fn none() -> Self {
         Self::new(|_| Box::pin(async {}))
     }
