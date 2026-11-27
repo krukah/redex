@@ -235,3 +235,7 @@ from one source, and each adds a case that fails before the fix and passes after
    match `\r`), so notes and definitions fell into the term body. Both parsers now drop one
    trailing `\r` per line. Cases: `-- note\r\nx` (the note is kept now) and
    `def k := a\r\n-- uses k\r\nk b\r\n`.
+3. **Characters outside the Basic Multilingual Plane** in "Unexpected character". The JS walked
+   UTF-16 code units and quoted half a surrogate pair; it now quotes the whole code point
+   (`String.fromCodePoint(src.codePointAt(i))`), as the Rust always did. Cases: `x 😀 y`,
+   `λ𝑥. 𝑥`; the Rust test failed against the old fixture and passes now.

@@ -297,7 +297,7 @@ function tokenize(src) {
       else toks.push({ t: 'id', v: w });
       i = j; continue;
     }
-    throw new Error(`Unexpected character “${c}”.`);
+    throw new Error(`Unexpected character “${String.fromCodePoint(src.codePointAt(i))}”.`);
   }
   return toks;
 }
