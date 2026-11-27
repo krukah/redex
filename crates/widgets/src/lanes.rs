@@ -28,6 +28,16 @@ pub struct Lane {
 /// The strategy race: one start term, three rules for picking the next redex, side by side.
 pub struct Track;
 
+impl Lane {
+    fn strategy(&self) -> Strategy {
+        self.strategy
+    }
+
+    fn sub(&self) -> &'static str {
+        self.sub
+    }
+}
+
 impl Track {
     pub const CAP: Cap = Cap::new(24);
     pub const TICK: Ms = Ms::new(420.0);
@@ -59,7 +69,7 @@ impl Track {
     pub fn runs((term, env): &(Term, Env)) -> Vec<Run> {
         Self::LANES
             .iter()
-            .map(|l| Run::new(term, env, l.strategy, Self::CAP))
+            .map(|l| Run::new(term, env, l.strategy(), Self::CAP))
             .collect()
     }
 
@@ -120,14 +130,14 @@ impl Track {
                 .kid(Node::text(msg));
             let top = Node::el(Tag::Div)
                 .class([Class::LaneTop])
-                .kid(Node::el(Tag::B).kid(Node::text(l.strategy.label())))
+                .kid(Node::el(Tag::B).kid(Node::text(l.strategy().label())))
                 .kid(Node::el(Tag::Span).class([Class::Count]).kid(Self::count(r)));
             Node::el(Tag::Div)
                 .class([Class::Lane])
                 .kid(
                     Node::el(Tag::Header)
                         .kid(top)
-                        .kid(Node::el(Tag::P).kid(Node::text(l.sub))),
+                        .kid(Node::el(Tag::P).kid(Node::text(l.sub()))),
                 )
                 .kid(Node::el(Tag::Ol).kids(rows).kid(end))
         }))
@@ -151,7 +161,7 @@ impl Heat {
 
     /// The longest lane, in rows: the tick that reveals its end.
     fn last(&self) -> Step {
-        Step::new(self.runs.iter().map(|r| r.rows().len()).max().unwrap_or(0))
+        Step::new(self.runs().iter().map(|r| r.rows().len()).max().unwrap_or(0))
     }
 }
 
@@ -181,8 +191,12 @@ impl Stand {
         &self.timer
     }
 
+    fn anchor(&self) -> NodeRef<html::Div> {
+        self.anchor
+    }
+
     fn q(&self, sel: Class) -> Option<Element> {
-        Doc::above(self.anchor.get_untracked()).and_then(|r| Doc::q(&r, &sel.into()))
+        Doc::above(self.anchor().get_untracked()).and_then(|r| Doc::q(&r, &sel.into()))
     }
 
     fn render(self: &Rc<Self>, animate: bool) {
@@ -276,14 +290,14 @@ pub fn Lanes() -> impl IntoView {
         }
     });
     let late = stand.clone();
-    stand.anchor.on_load(move |_| {
+    stand.anchor().on_load(move |_| {
         if !late.drawn().get() {
             late.render(false);
         }
     });
     let (b1, b2) = (stand.clone(), stand.clone());
     view! {
-        <div class=Class::RaceBar.to_string() node_ref=stand.anchor on:click=move |e| b1.click(&e)>
+        <div class=Class::RaceBar.to_string() node_ref=stand.anchor() on:click=move |e| b1.click(&e)>
             <div class=Class::Pills.to_string()></div>
             <button type="button" class=Attr::Class(vec![Class::Btn, Class::Primary]).to_string() data-act=Act::Race.to_string()>
                 "Race"

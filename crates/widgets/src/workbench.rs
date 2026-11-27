@@ -97,7 +97,7 @@ impl Piece {
 
     /// A piece of the term moves; a binder's tab and a definition's body stay where they are.
     fn travels(&self) -> bool {
-        self.uid.is_some() && !self.external
+        self.uid().is_some() && !self.external()
     }
 
     fn measured(self) -> Self {
@@ -233,6 +233,10 @@ impl Bench {
         &self.session
     }
 
+    fn anchor(&self) -> NodeRef<html::Div> {
+        self.anchor
+    }
+
     fn arcs(&self) -> &Cell<bool> {
         &self.arcs
     }
@@ -295,7 +299,7 @@ impl Bench {
     }
 
     fn root(&self) -> Option<Element> {
-        Doc::above(self.anchor.get_untracked())
+        Doc::above(self.anchor().get_untracked())
     }
 
     fn q(&self, sel: &Selector) -> Option<Element> {

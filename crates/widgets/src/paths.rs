@@ -30,6 +30,10 @@ pub struct Chart {
 }
 
 impl Chart {
+    fn env(&self) -> &Env {
+        &self.env
+    }
+
     /// Stop exploring after this many terms.
     pub const CAP: Cap = Cap::new(70);
     /// A route follows a strategy this far.
@@ -61,6 +65,10 @@ impl Chart {
         }
     }
 
+    fn plate(&self) -> Plate {
+        self.plate
+    }
+
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
@@ -72,13 +80,13 @@ impl Chart {
     pub fn svg(&self, sel: Option<Id>) -> Node {
         let js = Num::Js;
         let px = Px::new;
-        let grid = self.plot.rows().map(|d| {
+        let grid = self.plot().rows().map(|d| {
             let y = Plot::row(d);
             Node::list([
                 Node::el(Tag::Line)
                     .class([Class::Gridline])
                     .attr(Attr::X1(js(Plot::ML - px(18.0))))
-                    .attr(Attr::X2(js(self.plot.width() - px(12.0))))
+                    .attr(Attr::X2(js(self.plot().width() - px(12.0))))
                     .attr(Attr::Y1(js(y)))
                     .attr(Attr::Y2(js(y))),
                 Node::el(Tag::Text)
@@ -93,7 +101,7 @@ impl Chart {
             .attr(Attr::X(js(Plot::ML - px(26.0))))
             .attr(Attr::Y(js(Plot::MT - px(18.0))))
             .kid(Node::text("steps"));
-        let edges = self.graph.edges().iter().zip(self.plot.routes()).map(|(e, d)| {
+        let edges = self.graph().edges().iter().zip(self.plot().routes()).map(|(e, d)| {
             let title = if e.kind().ink() == Kind::Proj {
                 Node::text(Kind::Proj.glyph())
             } else {
@@ -103,16 +111,16 @@ impl Chart {
                 .class([Class::Ge, Class::Ink(e.kind())])
                 .attr(Attr::Source(e.from()))
                 .attr(Attr::Target(e.to()))
-                .attr(Attr::Style(Style::Row(self.graph.vertex(e.from()).depth())))
+                .attr(Attr::Style(Style::Row(self.graph().vertex(e.from()).depth())))
                 .attr(Attr::Unit)
                 .attr(Attr::D(d.clone()))
-                .attr(Attr::MarkerEnd(self.plate, e.kind().ink()))
+                .attr(Attr::MarkerEnd(self.plate(), e.kind().ink()))
                 .kid(Node::el(Tag::Title).kid(title))
         });
-        let nodes = self.graph.vertices().map(|(i, v)| self.vertex(i, v, sel));
+        let nodes = self.graph().vertices().map(|(i, v)| self.vertex(i, v, sel));
         let markers = Self::KINDS.iter().map(|k| {
             Node::el(Tag::Marker)
-                .attr(Attr::Marker(self.plate, *k))
+                .attr(Attr::Marker(self.plate(), *k))
                 .attr(Attr::ViewBox(js(Px::ZERO), js(Px::ZERO), js(px(10.0)), js(px(10.0))))
                 .attr(Attr::RefX(js(px(8.0))))
                 .attr(Attr::RefY(js(px(5.0))))
@@ -147,7 +155,7 @@ impl Chart {
 
     fn vertex(&self, i: Id, v: &Vertex, sel: Option<Id>) -> Node {
         let js = Num::Js;
-        let (s, r, px) = (self.plot.spot(i), Plot::R, Px::new);
+        let (s, r, px) = (self.plot().spot(i), Plot::R, Px::new);
         let (x, y) = (s.x(), s.y());
         let mark = match s.form() {
             Form::Nf => Node::el(Tag::Rect)
@@ -221,13 +229,13 @@ impl Chart {
     }
 
     pub fn stats(&self) -> String {
-        let (n, e, nf) = (self.graph.len(), self.graph.edges().len(), self.graph.normal());
+        let (n, e, nf) = (self.graph().len(), self.graph().edges().len(), self.graph().normal());
         format!(
             "{n} term{} · {e} step{} · {nf} normal form{}{}",
             if n > 1 { "s" } else { "" },
             if e == 1 { "" } else { "s" },
             if nf == 1 { "" } else { "s" },
-            if self.graph.truncated() {
+            if self.graph().truncated() {
                 format!(" · stopped at {} terms", Self::CAP)
             } else {
                 String::new()
@@ -236,18 +244,18 @@ impl Chart {
     }
 
     pub fn verdict(&self) -> String {
-        let nf = self.graph.normal();
-        let finished = match (nf, self.graph.truncated()) {
+        let nf = self.graph().normal();
+        let finished = match (nf, self.graph().truncated()) {
             (1, true) => "Every finished path so far ends at the same normal form.",
             (1, false) => "Every path that finishes ends at the same normal form.",
             _ => "",
         };
-        let looping = match (self.graph.cyclic(), nf > 0) {
+        let looping = match (self.graph().cyclic(), nf > 0) {
             (true, true) => " Some paths loop instead of finishing.",
             (true, false) => "No normal form: every path keeps going.",
             (false, _) => "",
         };
-        if self.graph.edges().is_empty() {
+        if self.graph().edges().is_empty() {
             "Already in normal form. Nothing to fire.".to_string()
         } else {
             format!("{finished}{looping}").trim().to_string()
@@ -271,15 +279,15 @@ impl Chart {
         let Some(strategy) = route else {
             return (Node::none(), String::new());
         };
-        let run = Run::new(self.graph.root().term(), &self.env, strategy, Self::ROUTE);
-        let find = |t: &Term| self.graph.find(&t.key());
+        let run = Run::new(self.graph().root().term(), self.env(), strategy, Self::ROUTE);
+        let find = |t: &Term| self.graph().find(&t.key());
         let rows = run.rows();
         let walked = (1..rows.len())
             .map_while(|i| Some((i, find(rows[i - 1].term())?, find(rows[i].term())?)))
             .collect::<Vec<(usize, Id, Id)>>();
         let left = walked.len() + 1 < rows.len();
         let steps = Step::new(walked.last().map_or(0, |w| w.0));
-        let edges = self.graph.edges();
+        let edges = self.graph().edges();
         let paths = walked.iter().filter_map(|&(i, a, b)| {
             edges
                 .iter()
@@ -288,12 +296,12 @@ impl Chart {
                 .map(|e| {
                     Node::el(Tag::Path)
                         .class([Class::Band])
-                        .attr(Attr::D(self.plot.routes()[e].clone()))
+                        .attr(Attr::D(self.plot().routes()[e].clone()))
                 })
         });
         let end = find(rows[steps.get().min(rows.len() - 1)].term());
         let ring = end.filter(|_| run.status() == Status::Done && !left).map(|e| {
-            let s = self.plot.spot(e);
+            let s = self.plot().spot(e);
             Node::el(Tag::Circle)
                 .class([Class::BandEnd])
                 .attr(Attr::Cx(Num::Js(s.x())))
@@ -306,7 +314,7 @@ impl Chart {
             (false, Status::Done) => format!(
                 "{label}: {steps} step{} to a {}.",
                 if steps == Step::ONE { "" } else { "s" },
-                end.map_or("stop", |e| self.plot.spot(e).form().label())
+                end.map_or("stop", |e| self.plot().spot(e).form().label())
             ),
             (false, _) => format!("{label} never stops: it loops."),
         };
@@ -314,7 +322,7 @@ impl Chart {
     }
 
     pub fn tip(&self, i: Id) -> Node {
-        let v = self.graph.vertex(i);
+        let v = self.graph().vertex(i);
         let d = v.depth();
         let meta = format!(
             " · size {} · {d} step{} from the start",
@@ -324,7 +332,7 @@ impl Chart {
         Node::list([
             Node::el(Tag::Div)
                 .class([Class::TipMeta])
-                .kid(Node::el(Tag::B).kid(Node::text(self.plot.spot(i).form().label())))
+                .kid(Node::el(Tag::B).kid(Node::text(self.plot().spot(i).form().label())))
                 .kid(Node::text(meta)),
             Node::el(Tag::Div).class([Class::Tm]).kid(Node::text(v.term().text())),
         ])
@@ -335,7 +343,7 @@ impl Chart {
             return Node::el(Tag::P)
                 .kid(Node::text("Hover a mark to read its term. Click it to open it in the workbench."));
         };
-        let v = self.graph.vertex(i);
+        let v = self.graph().vertex(i);
         let place = match v.depth() {
             Depth::START => "Start term".to_string(),
             d => format!("{d} step{} from the start on the shortest path", if d > Depth::new(1) { "s" } else { "" }),
@@ -344,13 +352,13 @@ impl Chart {
             Node::el(Tag::Div).class([Class::Scroll]).kid(
                 Node::el(Tag::Div)
                     .class([Class::Stage, Class::Small, Class::Flat, Class::Tm])
-                    .kid(Blocks::new(&self.env, false, false).node(v.term())),
+                    .kid(Blocks::new(self.env(), false, false).node(v.term())),
             ),
             Node::el(Tag::Div)
                 .class([Class::Row])
                 .kid(Node::el(Tag::Span).kid(Node::text(format!(
                     "{place} · {} · size {}",
-                    self.plot.spot(i).form().label(),
+                    self.plot().spot(i).form().label(),
                     v.term().size()
                 ))))
                 .kid(Node::el(Tag::Span).class([Class::Grow]))
@@ -366,15 +374,15 @@ impl Chart {
 
     /// The start-to-here chain of a vertex, as history entries.
     pub fn chain(&self, i: Id) -> Vec<Entry> {
-        let mut chain = std::iter::successors(Some(i), |&k| self.graph.vertex(k).parent()).collect::<Vec<Id>>();
+        let mut chain = std::iter::successors(Some(i), |&k| self.graph().vertex(k).parent()).collect::<Vec<Id>>();
         chain.reverse();
         chain
             .iter()
             .enumerate()
             .map(|(j, &k)| {
                 Entry::new(
-                    self.graph.vertex(k).term().clone(),
-                    if j > 0 { self.graph.vertex(k).pkind() } else { None },
+                    self.graph().vertex(k).term().clone(),
+                    if j > 0 { self.graph().vertex(k).pkind() } else { None },
                     None,
                 )
             })

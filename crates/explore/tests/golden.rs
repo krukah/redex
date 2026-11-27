@@ -14,6 +14,14 @@ struct Case {
 }
 
 impl Case {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn want(&self) -> &Value {
+        &self.want
+    }
+
     /// Keys the engine does not produce: the blocks view belongs to `widgets`.
     const SKIP: [&'static str; 3] = ["blocks", "debruijn", "id"];
 
@@ -28,17 +36,17 @@ impl Case {
                 want: serde_json::from_str(&std::fs::read_to_string(&p).expect("a readable fixture")).expect("json"),
             })
             .collect::<Vec<Case>>();
-        cases.sort_by(|a, b| a.name.cmp(&b.name));
+        cases.sort_by(|a, b| a.name().cmp(b.name()));
         assert!(cases.len() > 90, "found {} fixtures", cases.len());
         cases
     }
 
     fn src(&self) -> &str {
-        self.want["src"].as_str().expect("a source")
+        self.want()["src"].as_str().expect("a source")
     }
 
     fn eta(&self) -> bool {
-        self.want["eta"].as_bool().expect("an eta flag")
+        self.want()["eta"].as_bool().expect("an eta flag")
     }
 
     /// The fixture's view of the source, computed by the Rust engine.
@@ -133,13 +141,13 @@ impl Case {
 
     fn check(&self) -> Vec<String> {
         let got = self.study();
-        let want = self.want.as_object().expect("a fixture object");
+        let want = self.want().as_object().expect("a fixture object");
         want.iter()
             .filter(|(k, _)| !Self::SKIP.contains(&k.as_str()))
             .filter_map(|(k, w)| {
                 Self::strip(w)
                     .ne(&got[k])
-                    .then(|| format!("{}: {k} differs\n want {}\n  got {}", self.name, Self::strip(w), got[k]))
+                    .then(|| format!("{}: {k} differs\n want {}\n  got {}", self.name(), Self::strip(w), got[k]))
             })
             .collect()
     }
@@ -204,7 +212,7 @@ fn examples_and_races_are_the_fixture_sources() {
     let src = |name: String| {
         cases
             .iter()
-            .find(|c| c.name == name)
+            .find(|c| c.name() == name)
             .map(|c| (c.src().to_string(), c.eta()))
     };
     examples::Example::all()

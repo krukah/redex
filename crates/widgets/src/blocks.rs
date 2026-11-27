@@ -24,10 +24,34 @@ struct Scope {
     hue: Hue,
 }
 
+impl Scope {
+    fn x(&self) -> &Name {
+        &self.x
+    }
+
+    fn anchor(&self) -> Anchor {
+        self.anchor
+    }
+
+    fn hue(&self) -> Hue {
+        self.hue
+    }
+}
+
 /// One node's drawing in progress: its classes and attributes, written in the JS order.
 struct Draft {
     classes: Vec<Class>,
     attrs: Vec<Attr>,
+}
+
+impl Draft {
+    fn classes_mut(&mut self) -> &mut Vec<Class> {
+        &mut self.classes
+    }
+
+    fn attrs_mut(&mut self) -> &mut Vec<Attr> {
+        &mut self.attrs
+    }
 }
 
 /// The nested-block view of a term. Each node is one element carrying its path and uid: λ and let
@@ -41,6 +65,18 @@ pub struct Blocks<'a> {
 }
 
 impl<'a> Blocks<'a> {
+    fn env(&self) -> &'a Env {
+        self.env
+    }
+
+    fn live(&self) -> bool {
+        self.live
+    }
+
+    fn db(&self) -> bool {
+        self.db
+    }
+
     pub fn new(env: &'a Env, live: bool, db: bool) -> Self {
         Self { env, live, db }
     }
@@ -52,7 +88,7 @@ impl<'a> Blocks<'a> {
 
     /// `spine` marks the function part of an application.
     fn draw(&self, t: &Term, p: &Path, ctx: &[Scope], d: Level, spine: bool, last: &mut Anchor) -> Node {
-        let kind = if self.live { t.redex(self.env) } else { None };
+        let kind = if self.live() { t.redex(self.env()) } else { None };
         let mut draft = Draft {
             classes: vec![Class::Block],
             attrs: [Attr::Path(p.clone()), Attr::Uid(t.uid())]
@@ -62,20 +98,22 @@ impl<'a> Blocks<'a> {
         };
         let (inner, boxed) = match (t.nat(), t.shape()) {
             (Some(n), _) => {
-                draft.classes.push(Class::Lit);
+                draft.classes_mut().push(Class::Lit);
                 (Node::text(n), false)
             }
             (None, Shape::Var(n)) => (self.var(n, ctx, &mut draft), false),
             (None, Shape::Const(n)) => {
-                draft
-                    .classes
-                    .extend([Class::Const].into_iter().chain(self.env.has(n).then_some(Class::Def)));
+                draft.classes_mut().extend(
+                    [Class::Const]
+                        .into_iter()
+                        .chain(self.env().has(n).then_some(Class::Def)),
+                );
                 (Node::text(n), false)
             }
             (None, Shape::Lam(..) | Shape::Let(..)) => (self.binder(t, p, ctx, d, &mut draft, last), true),
             (None, Shape::App(f, a)) => {
                 let k = if spine { d } else { d.inner() };
-                draft.classes.push(if spine { Class::Group } else { Class::App });
+                draft.classes_mut().push(if spine { Class::Group } else { Class::App });
                 (
                     Node::list([
                         self.draw(f, &p.child('f'), ctx, k, true, last),
@@ -85,7 +123,7 @@ impl<'a> Blocks<'a> {
                 )
             }
             (None, Shape::Pair(a, b)) => {
-                draft.classes.push(Class::Pair);
+                draft.classes_mut().push(Class::Pair);
                 let first = self.draw(a, &p.child('a'), ctx, d.inner(), false, last);
                 (
                     Node::list([
@@ -97,7 +135,7 @@ impl<'a> Blocks<'a> {
                 )
             }
             (None, Shape::Proj(i, s)) => {
-                draft.classes.push(Class::Proj);
+                draft.classes_mut().push(Class::Proj);
                 (
                     Node::list([
                         self.draw(s, &p.child('t'), ctx, d, false, last),
@@ -133,19 +171,19 @@ impl<'a> Blocks<'a> {
     }
 
     fn var(&self, n: &Name, ctx: &[Scope], draft: &mut Draft) -> Node {
-        match ctx.iter().rposition(|s| s.x == *n) {
+        match ctx.iter().rposition(|s| *s.x() == *n) {
             None => {
-                draft.classes.extend([Class::Bound, Class::Free]);
+                draft.classes_mut().extend([Class::Bound, Class::Free]);
                 Node::text(n)
             }
             Some(j) => {
-                draft.classes.extend(
-                    [Class::Bound, Class::Hue(ctx[j].hue)]
+                draft.classes_mut().extend(
+                    [Class::Bound, Class::Hue(ctx[j].hue())]
                         .into_iter()
-                        .chain(self.db.then_some(Class::Index)),
+                        .chain(self.db().then_some(Class::Index)),
                 );
-                draft.attrs.push(Attr::Bid(ctx[j].anchor));
-                if self.db { Node::text(ctx.len() - 1 - j) } else { Node::text(n) }
+                draft.attrs_mut().push(Attr::Bid(ctx[j].anchor()));
+                if self.db() { Node::text(ctx.len() - 1 - j) } else { Node::text(n) }
             }
         }
     }
@@ -154,17 +192,17 @@ impl<'a> Blocks<'a> {
         *last = last.next();
         let (anchor, x) = (*last, t.binder().cloned().unwrap_or_else(|| Name::from("")));
         let hue = Hue::of(&x);
-        draft.classes.extend([
+        draft.classes_mut().extend([
             if matches!(t.shape(), Shape::Lam(..)) { Class::Lam } else { Class::Let },
             Class::Hue(hue),
         ]);
-        draft.attrs.push(Attr::Binder(anchor));
+        draft.attrs_mut().push(Attr::Binder(anchor));
         let flashed = if t.mark() == Some(Mark::Binder) {
             vec![Class::Flash, Class::Flashed(Mark::Renamed)]
         } else {
             vec![]
         };
-        let name = match (self.db, self.live) {
+        let name = match (self.db(), self.live()) {
             (true, _) => Node::none(),
             (false, true) => Node::el(Tag::Button)
                 .attr(Attr::Button)
@@ -180,7 +218,7 @@ impl<'a> Blocks<'a> {
         };
         let kw = |s: &str| {
             let k = Node::el(Tag::Span).class([Class::Keyword]);
-            (if self.db { k.attr(Attr::Anchor(anchor)) } else { k }).kid(Node::text(s))
+            (if self.db() { k.attr(Attr::Anchor(anchor)) } else { k }).kid(Node::text(s))
         };
         let inside = ctx
             .iter()
