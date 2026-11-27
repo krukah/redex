@@ -8,10 +8,12 @@ use std::task::Waker;
 
 use wasm_bindgen::prelude::*;
 
-/// A future that resolves when a promise settles, either way.
+/// A future that resolves when a promise settles, either way. Dropped before the promise settles
+/// (a tween's timer won the race), it leaves its callback to JS rather than free it under a
+/// promise that will still call it.
 pub struct Settle {
     state: Rc<RefCell<(bool, Option<Waker>)>>,
-    _done: Closure<dyn FnMut(JsValue)>,
+    done: Option<Closure<dyn FnMut(JsValue)>>,
 }
 
 impl Settle {
@@ -26,13 +28,30 @@ impl Settle {
             }
         });
         let _ = promise.then2(&done, &done);
-        Self { state, _done: done }
+        Self {
+            state,
+            done: Some(done),
+        }
     }
 }
 
 impl Settle {
     fn state(&self) -> &Rc<RefCell<(bool, Option<Waker>)>> {
         &self.state
+    }
+
+    fn done_mut(&mut self) -> &mut Option<Closure<dyn FnMut(JsValue)>> {
+        &mut self.done
+    }
+}
+
+impl Drop for Settle {
+    fn drop(&mut self) {
+        if !self.state().borrow().0
+            && let Some(done) = self.done_mut().take()
+        {
+            done.forget();
+        }
     }
 }
 

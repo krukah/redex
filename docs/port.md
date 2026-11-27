@@ -239,6 +239,12 @@ from one source, and each adds a case that fails before the fix and passes after
    graph emits it and each workbench scrolls its own root. `scripts/reveal.mjs` mounts two groups
    on one page and opens a term from the second group's graph: before the fix both engines left
    the second workbench 3867 px down; after, it sits at the top, in the JS and the Rust.
+5. **A freed callback under a pending promise (Rust only).** When a tween's safety timer won the
+   race against the animation's `finished` promise, the `Settle` future and its JS callback were
+   dropped, and the promise later called the freed closure ("closure invoked recursively or after
+   being dropped", seen during Normalize after the cutover). `Settle` now leaves an unsettled
+   callback to JS when dropped. Checked by loading the built page in headless Chrome and running
+   Normalize: three page errors before, none after.
 
 ## 6b. Typed markup, newtypes, house style — done
 
