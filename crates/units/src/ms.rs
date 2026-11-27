@@ -1,6 +1,7 @@
 use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
+use std::ops::Sub;
 
 /// A duration in milliseconds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
@@ -44,5 +45,13 @@ impl Div<f64> for Ms {
 
     fn div(self, k: f64) -> Ms {
         Ms(self.0 / k)
+    }
+}
+
+impl Sub for Ms {
+    type Output = Ms;
+
+    fn sub(self, o: Ms) -> Ms {
+        Ms(self.0 - o.0)
     }
 }

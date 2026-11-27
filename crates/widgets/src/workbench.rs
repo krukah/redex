@@ -232,13 +232,6 @@ impl Bench {
     const NAMES: [&'static str; 20] = [
         "x", "y", "z", "w", "u", "v", "a", "b", "c", "f", "g", "h", "k", "m", "n", "p", "q", "r", "s", "t",
     ];
-    /// How long a firing shows its match before anything moves, at speed 1.
-    const HOLD: Ms = Ms::new(560.0);
-    /// How long an automatic α step stays on screen before its β fires.
-    const RENAME: Ms = Ms::new(1000.0);
-    /// Between the pieces of a firing, and between the copies of one piece.
-    const PIECES: Ms = Ms::new(50.0);
-    const COPIES: Ms = Ms::new(40.0);
     /// How much of a bound piece the rule card shows, in UTF-16 units.
     const SHORT: usize = 34;
     /// A run stops after this many steps, or once the term passes this size.
@@ -642,15 +635,12 @@ impl Bench {
         }
     }
 
-    fn show_rule(&self, hit: Option<(&Element, &Match)>) {
+    fn show_rule(&self, hit: Option<(Kind, &Match)>) {
         let Some(card) = self.q(&Class::Rule.into()) else {
             return;
         };
-        let Some((rx, m)) = hit else {
+        let Some((kind, m)) = hit else {
             Doc::fill(&card, &Self::hint());
-            return;
-        };
-        let Some(kind) = Doc::read::<Kind>(rx, Data::Kind) else {
             return;
         };
         let mv =
@@ -701,7 +691,7 @@ impl Bench {
         };
         let m = self.matched(&path, kind);
         self.paint(&m, Class::Soft);
-        self.show_rule(Some((&rx, &m)));
+        self.show_rule(Some((kind, &m)));
     }
 
     fn set_lit(&self, id: Option<Anchor>) {
@@ -758,30 +748,41 @@ impl Bench {
         }
     }
 
-    /// After the step: the composition that carries the old layout to the new one. The husk fades
-    /// out, each piece flies to every node of the result built from it (or fades), the result fades
-    /// in, and the context glides.
+    /// After the step: the composition that carries the old layout to the new one. Every part
+    /// starts at once and ends with the move phase: the husk fades out, each piece flies to every
+    /// node of the result built from it (or fades), the result fades in, and the context glides.
+    /// A result drawn inside a larger box (a numeral absorbs its `succ`s) lands on that box.
     fn move_to(self: &Rc<Self>, lifted: &Lifted, path: &Path) -> Motion {
-        let Some(result) = self.node(path) else {
+        let Some(result) = std::iter::successors(Some(path.clone()), |p| (*p != Path::root()).then(|| p.parent()))
+            .find_map(|p| self.node(&p))
+        else {
             return Motion::all(
                 lifted
                     .husk()
                     .into_iter()
                     .chain(lifted.pieces().iter().filter_map(Piece::ghost))
-                    .map(|g| Motion::exit(g, Tween::default()))
+                    .map(|g| Motion::exit(g, Schedule::part(Role::Fade)))
                     .collect(),
             );
         };
         Motion::all(vec![
             lifted
                 .husk()
-                .map_or_else(Motion::none, |h| Motion::exit(h, Tween::default())),
-            Motion::enter(&result, Tween::default()),
-            Motion::stagger(Self::PIECES, lifted.pieces().iter().map(|pc| Self::travel(pc, &result)).collect()),
+                .map_or_else(Motion::none, |h| Motion::exit(h, Schedule::part(Role::Fade))),
+            Motion::enter(&result, Schedule::part(Role::Arrive)),
+            Motion::all(
+                lifted
+                    .pieces()
+                    .iter()
+                    .filter_map(|pc| Self::travel(pc, &result))
+                    .collect(),
+            ),
             self.glide(lifted, &result),
         ])
     }
 
+    /// One piece to every place the result uses it, all copies at once; a piece the result drops
+    /// fades where it stood.
     fn travel(pc: &Piece, result: &Element) -> Option<Motion> {
         let ghost = pc.ghost()?.clone();
         let uid = pc.uid();
@@ -793,16 +794,15 @@ impl Bench {
             return Some(if pc.external() {
                 Motion::act(move || ghost.remove())
             } else {
-                Motion::exit(&ghost, Tween::default())
+                Motion::exit(&ghost, Schedule::part(Role::Fade))
             });
         }
         let rect = pc.rect()?.clone();
         let slot = pc.slot();
-        Some(Motion::stagger(
-            Self::COPIES,
+        Some(Motion::all(
             hits.iter()
                 .enumerate()
-                .map(|(j, tg)| {
+                .filter_map(|(j, tg)| {
                     let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
                     let dst = Ghost::pin(
                         tg,
@@ -817,17 +817,15 @@ impl Bench {
                     let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
                     Some(Motion::seq(vec![
                         Motion::all(vec![
-                            Motion::fly(&src, dx, dy, Tween::default()),
-                            Motion::fly(&dst, dx, dy, Tween::default()),
-                            Motion::crossfade(&src, &dst, Tween::default()),
+                            Motion::fly(&src, dx, dy, Schedule::part(Role::Fly)),
+                            Motion::fly(&dst, dx, dy, Schedule::part(Role::Fly)),
+                            Motion::crossfade(&src, &dst, Schedule::part(Role::Swap)),
                         ]),
                         Motion::act(move || {
                             Doc::remove(&tg, &[Class::Arriving]);
                             if let Some(s) = slot {
                                 Doc::add(&tg, &[Class::Landed, Class::Slot(s)]);
                             }
-                        }),
-                        Motion::act(move || {
                             a.remove();
                             b.remove();
                         }),
@@ -860,19 +858,22 @@ impl Bench {
                     &stage,
                     old,
                     &stage.get_bounding_client_rect(),
-                    Tween::default(),
+                    Schedule::part(Role::Glide),
                 )]
             })
             .unwrap_or_default();
         Self::visit(&line, lifted.layout(), result, &mut moves);
-        let (on, off, me) = (stage.clone(), stage, self.clone());
-        Motion::seq(vec![
-            Motion::act(move || Doc::add(&on, &[Class::Gliding])),
+        Doc::add(&stage, &[Class::Gliding]);
+        let me = self.clone();
+        Motion::all(vec![
             Motion::all(moves),
-            Motion::act(move || {
-                Doc::remove(&off, &[Class::Gliding]);
-                me.links();
-            }),
+            Motion::after(
+                Phase::Move.ms(),
+                Motion::act(move || {
+                    Doc::remove(&stage, &[Class::Gliding]);
+                    me.links();
+                }),
+            ),
         ])
     }
 
@@ -887,17 +888,17 @@ impl Bench {
             };
             let (old, now) = (before.get(&uid), c.get_bounding_client_rect());
             if c.contains(Some(result)) {
-                moves.extend(old.map(|old| Motion::resize(&c, old, &now, Tween::default())));
+                moves.extend(old.map(|old| Motion::resize(&c, old, &now, Schedule::part(Role::Glide))));
                 Self::visit(&c, before, result, moves);
             } else {
                 moves.push(old.map_or_else(
-                    || Motion::enter(&c, Tween::default()),
+                    || Motion::enter(&c, Schedule::part(Role::Glide)),
                     |old| {
                         Motion::slide(
                             &c,
                             Px::new(old.left() - now.left()),
                             Px::new(old.top() - now.top()),
-                            Tween::default(),
+                            Schedule::part(Role::Glide),
                         )
                     },
                 ));
@@ -947,15 +948,25 @@ impl Bench {
         ))
     }
 
-    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, clock: Clock) {
+    /// One step on the schedule: hold, move, settle. A β or ζ that would capture first takes an α
+    /// step of its own, on the same schedule.
+    /// One step on the schedule: hold, move, settle, each ending at a fixed time after the step
+    /// began. A β or ζ that would capture first takes an α step of its own, on the same schedule.
+    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, schedule: Schedule) {
         Cue::Fire.mark();
         if let Some((renamed, note)) = self.rename_first(&self.session().term(), &path, kind) {
-            self.session().push(Entry::new(renamed, Some(Kind::Alpha), Some(note)));
-            Cue::Alpha.mark();
+            let start = Schedule::now();
             if Motion::enabled() {
-                Motion::wait(clock.scale(Self::RENAME)).await;
+                self.show_rule(Some((Kind::Alpha, &self.matched(&path, Kind::Alpha))));
+                Cue::Alpha.mark();
+                schedule.until(start, Phase::Hold).await;
+            }
+            self.session().push(Entry::new(renamed, Some(Kind::Alpha), Some(note)));
+            if Motion::enabled() {
+                schedule.until(start, Phase::Settle).await;
             }
         }
+        let start = Schedule::now();
         let mut lifted = None;
         if Motion::enabled() {
             let (rx, m) = (self.node(&path), self.matched(&path, kind));
@@ -963,10 +974,10 @@ impl Bench {
             if let Some(rx) = &rx {
                 Doc::add(rx, &[Class::Firing]);
             }
-            self.show_rule(rx.as_ref().map(|rx| (rx, &m)));
+            self.show_rule(Some((kind, &m)));
             self.paint(&m, Class::Hard);
             Cue::Hold.mark();
-            Motion::wait(clock.scale(Self::HOLD)).await;
+            schedule.until(start, Phase::Hold).await;
             Cue::Lift.mark();
             lifted = Some(self.lift(&m, &path));
         }
@@ -978,8 +989,10 @@ impl Bench {
         ));
         if let Some(lifted) = lifted {
             Cue::Move.mark();
-            self.move_to(&lifted, &path).play(clock).await;
+            leptos::task::spawn_local(self.move_to(&lifted, &path).play(schedule.clock()));
+            schedule.until(start, Phase::Move).await;
             Cue::Moved.mark();
+            schedule.until(start, Phase::Settle).await;
         }
     }
 
@@ -990,21 +1003,11 @@ impl Bench {
         self.session().set_busy(true);
         *self.note().borrow_mut() = None;
         self.set_controls();
-        self.clone().fire_at(path, kind, Clock::default()).await;
+        self.clone().fire_at(path, kind, Schedule::STEP).await;
         self.session().set_busy(false);
         self.unpaint();
         self.show_rule(None);
         self.set_controls();
-    }
-
-    /// The speed of a run's `n`th step: the first few at reading pace, then faster.
-    fn pace(mode: Mode, n: Step) -> Clock {
-        match (mode, n.get()) {
-            (Mode::Step, _) => Clock::default(),
-            (_, 0..3) => Clock::new(1.3),
-            (_, 3..12) => Clock::new(2.2),
-            _ => Clock::new(4.5),
-        }
     }
 
     async fn run(self: Rc<Self>, mode: Mode) {
@@ -1033,7 +1036,7 @@ impl Bench {
                 break;
             };
             self.clone()
-                .fire_at(r.path().clone(), r.kind(), Self::pace(mode, n))
+                .fire_at(r.path().clone(), r.kind(), if mode == Mode::Step { Schedule::STEP } else { Schedule::RUN })
                 .await;
             n = n.next();
             if mode == Mode::Step {

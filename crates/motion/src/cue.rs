@@ -29,7 +29,7 @@ impl Cue {
     }
 
     pub fn mark(self) {
-        if let Some(p) = web_sys::window().and_then(|w| w.performance()) {
+        if let Some(p) = web_sys::window().as_ref().and_then(web_sys::Window::performance) {
             let _ = p.mark(self.name());
         }
     }

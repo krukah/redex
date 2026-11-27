@@ -18,6 +18,13 @@ impl Tween {
         Self { ms: Some(ms), ..self }
     }
 
+    pub fn delay(self, delay: Ms) -> Self {
+        Self {
+            delay: Some(delay),
+            ..self
+        }
+    }
+
     pub fn ease(self, ease: Ease) -> Self {
         Self {
             ease: Some(ease),
