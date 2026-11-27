@@ -43,7 +43,8 @@ impl Schedule {
             web_sys::window()
                 .as_ref()
                 .and_then(web_sys::Window::performance)
-                .map_or(0.0, |p| p.now()),
+                .as_ref()
+                .map_or(0.0, web_sys::Performance::now),
         )
     }
 
