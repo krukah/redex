@@ -220,3 +220,14 @@ Decisions and gaps
   wasm-bindgen CLI pinned to `Cargo.lock`'s version and a recent `wasm-opt`).
 
 Size: 155.2 KB gzipped (page); 176.8 KB (site build, with the `mountAll` export).
+
+## Bugs fixed
+
+Each fix lands in the JS and the Rust together, so `scripts/golden.mjs` still writes every fixture
+from one source, and each adds a case that fails before the fix and passes after.
+
+1. **Definition names that are `Object.prototype` members.** `def toString := a` (or
+   `constructor`, `valueOf`, `__proto__`, …) was rejected as "built in", because the JS looked
+   the name up with `ALIAS[name]` on a plain object. Now `Object.hasOwn(ALIAS, name)`, in the
+   check and in name resolution; the Rust drops its copy of the prototype list. Cases in
+   `errors.json`: `toString`, `constructor`, `__proto__` (used as a constant), `valueOf`.

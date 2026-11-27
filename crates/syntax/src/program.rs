@@ -14,22 +14,6 @@ pub struct Program {
 
 impl Program {
     const ALIAS: [(&'static str, &'static str); 2] = [("Nat.zero", "zero"), ("Nat.succ", "succ")];
-    /// `ALIAS[name]` in the JS engine is also truthy for every `Object.prototype` member.
-    const PROTO: [&'static str; 12] = [
-        "constructor",
-        "__defineGetter__",
-        "__defineSetter__",
-        "hasOwnProperty",
-        "__lookupGetter__",
-        "__lookupSetter__",
-        "isPrototypeOf",
-        "propertyIsEnumerable",
-        "toString",
-        "valueOf",
-        "__proto__",
-        "toLocaleString",
-    ];
-
     pub fn parse(src: &str) -> Result<Self, String> {
         let mut env = Env::default();
         let mut notes = Vec::new();
@@ -52,7 +36,7 @@ impl Program {
     }
 
     fn define(env: &mut Env, line: usize, name: &str, src: &str) -> Result<(), String> {
-        if Consts::prim(name) || Self::ALIAS.iter().any(|(a, _)| *a == name) || Self::PROTO.contains(&name) {
+        if Consts::prim(name) || Self::ALIAS.iter().any(|(a, _)| *a == name) {
             return Err(format!("Line {line}: {name} is built in and cannot be redefined."));
         }
         let t = Parser::parse(src).map_err(|e| format!("Line {line}: {e}"))?;

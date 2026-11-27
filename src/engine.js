@@ -364,7 +364,7 @@ function resolve(t, env, bound = new Set()) {
   switch (t.k) {
     case 'var': {
       if (bound.has(t.n)) return t;
-      const n = ALIAS[t.n] || t.n;
+      const n = Object.hasOwn(ALIAS, t.n) ? ALIAS[t.n] : t.n;
       return PRIMS.has(n) || env.has(n) ? C(n) : t;
     }
     case 'const': return t;
@@ -384,7 +384,7 @@ export function parseProgram(src) {
     if (c) { notes.push(c[1]); return; }
     if (d) {
       const name = d[1];
-      if (PRIMS.has(name) || ALIAS[name]) throw new Error(`Line ${i + 1}: ${name} is built in and cannot be redefined.`);
+      if (PRIMS.has(name) || Object.hasOwn(ALIAS, name)) throw new Error(`Line ${i + 1}: ${name} is built in and cannot be redefined.`);
       let t;
       try { t = parseTerm(d[2]); } catch (e) { throw new Error(`Line ${i + 1}: ${e.message}`); }
       env.set(name, resolve(t, env));
