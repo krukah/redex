@@ -77,8 +77,12 @@ impl Reduce for Term {
     }
 
     fn step(&self, r: &Redex, env: &Env) -> Term {
-        let redex = self.at(r.path()).expect("a redex's path is inside its term");
-        self.replace(r.path(), redex.contract(r.kind(), env))
+        self.replace(
+            r.path(),
+            self.at(r.path())
+                .expect("a redex's path is inside its term")
+                .contract(r.kind(), env),
+        )
     }
 
     fn iota(&self) -> Term {

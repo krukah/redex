@@ -25,23 +25,22 @@ impl Thumb {
     pub fn new(term: &Term, env: &Env, eta: bool) -> Self {
         let g = Graph::explore(term, env, eta, Self::CAP);
         let at = Self::place(&g);
-        let edges = g
-            .edges()
-            .iter()
-            .filter(|e| g.vertex(e.from()).depth() <= Self::ROWS)
-            .map(|e| Self::edge(&g, e, &at));
-        let marks = g
-            .vertices()
-            .filter(|(_, v)| v.depth() <= Self::ROWS)
-            .map(|(i, v)| Self::mark(i, v, at[i.get()], env));
-        let svg = Node::el(Tag::Svg)
-            .class([Class::Thumb])
-            .attr(Attr::ViewBox(Num::Js(Px::ZERO), Num::Js(Px::ZERO), Num::Js(Self::TW), Num::Js(Self::TH)))
-            .attr(Attr::Hidden)
-            .kids(edges)
-            .kids(marks);
         Self {
-            svg,
+            svg: Node::el(Tag::Svg)
+                .class([Class::Thumb])
+                .attr(Attr::ViewBox(Num::Js(Px::ZERO), Num::Js(Px::ZERO), Num::Js(Self::TW), Num::Js(Self::TH)))
+                .attr(Attr::Hidden)
+                .kids(
+                    g.edges()
+                        .iter()
+                        .filter(|e| g.vertex(e.from()).depth() <= Self::ROWS)
+                        .map(|e| Self::edge(&g, e, &at)),
+                )
+                .kids(
+                    g.vertices()
+                        .filter(|(_, v)| v.depth() <= Self::ROWS)
+                        .map(|(i, v)| Self::mark(i, v, at[i.get()], env)),
+                ),
             fate: Self::ending(term, env, g.cyclic()),
         }
     }
@@ -84,7 +83,6 @@ impl Thumb {
         } else {
             Px::ZERO
         };
-        let y0 = (Self::TH - dy * depth) / 2.0;
         let mut at = vec![(Px::ZERO, Px::ZERO); g.len()];
         for (d, row) in rows.iter().enumerate() {
             let mut keyed = row
@@ -92,11 +90,12 @@ impl Thumb {
                 .map(|&v| (if d > 0 { Self::center(g, v, &at) } else { Px::ZERO }, v))
                 .collect::<Vec<(Px, Id)>>();
             keyed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-            let x0 = Self::TW / 2.0 - Px::new(7.0) - (dx * (keyed.len() as f64 - 1.0)) / 2.0;
-            keyed
-                .iter()
-                .enumerate()
-                .for_each(|(i, &(_, v))| at[v.get()] = (x0 + dx * i as f64, y0 + dy * d as f64));
+            keyed.iter().enumerate().for_each(|(i, &(_, v))| {
+                at[v.get()] = (
+                    (Self::TW / 2.0 - Px::new(7.0) - (dx * (keyed.len() as f64 - 1.0)) / 2.0) + dx * i as f64,
+                    ((Self::TH - dy * depth) / 2.0) + dy * d as f64,
+                );
+            });
         }
         at
     }
@@ -138,16 +137,13 @@ impl Thumb {
                 false,
             ),
             () if db.below(da) => (vec![Seg::Move(f(ax), f(ay + mr)), Seg::Line(f(bx), f(by - mr))], false),
-            () if db == da => {
-                let lift = px(5.0) + (bx - ax).abs() * 0.25;
-                (
-                    vec![
-                        Seg::Move(f(ax), f(ay - mr)),
-                        Seg::Quad(f(ax.midpoint(bx)), f(ay - lift), f(bx), f(by - mr)),
-                    ],
-                    false,
-                )
-            }
+            () if db == da => (
+                vec![
+                    Seg::Move(f(ax), f(ay - mr)),
+                    Seg::Quad(f(ax.midpoint(bx)), f(ay - (px(5.0) + (bx - ax).abs() * 0.25)), f(bx), f(by - mr)),
+                ],
+                false,
+            ),
             () => {
                 let sx = ax.max(bx) + px(10.0) + (ay - by).abs() * 0.3;
                 (
@@ -172,39 +168,42 @@ impl Thumb {
         let f = Num::Tenths;
         let mr = Self::MR;
         let open = v.open().then_some(Class::Open);
-        let ring = (i == Id::ROOT).then(|| {
-            Node::el(Tag::Circle)
-                .class([Class::Ring])
-                .attr(Attr::Cx(f(x)))
-                .attr(Attr::Cy(f(y)))
-                .attr(Attr::R(Num::Js(mr + Px::new(2.4))))
-        });
-        let shape = match (v.nf(), Strategy::Whnf.next(v.term(), env)) {
-            (true, _) => Node::el(Tag::Rect)
-                .class([Class::Mark, Class::Nf])
-                .attr(Attr::X(f(x - mr)))
-                .attr(Attr::Y(f(y - mr)))
-                .attr(Attr::Width(Num::Js(mr * 2.0)))
-                .attr(Attr::Height(Num::Js(mr * 2.0))),
-            (false, None) => {
-                let r = mr + Px::new(0.8);
-                Node::el(Tag::Path)
-                    .class([Class::Mark, Class::Whnf].into_iter().chain(open))
-                    .attr(Attr::D(Trace::tight(vec![
-                        Seg::Move(f(x), f(y - r)),
-                        Seg::Line(f(x + r), f(y)),
-                        Seg::Line(f(x), f(y + r)),
-                        Seg::Line(f(x - r), f(y)),
-                        Seg::Close,
-                    ])))
-            }
-            (false, Some(_)) => Node::el(Tag::Circle)
-                .class([Class::Mark, Class::Red].into_iter().chain(open))
-                .attr(Attr::Cx(f(x)))
-                .attr(Attr::Cy(f(y)))
-                .attr(Attr::R(Num::Js(mr))),
-        };
-        Node::list(ring.into_iter().chain([shape]))
+        Node::list(
+            (i == Id::ROOT)
+                .then(|| {
+                    Node::el(Tag::Circle)
+                        .class([Class::Ring])
+                        .attr(Attr::Cx(f(x)))
+                        .attr(Attr::Cy(f(y)))
+                        .attr(Attr::R(Num::Js(mr + Px::new(2.4))))
+                })
+                .into_iter()
+                .chain([match (v.nf(), Strategy::Whnf.next(v.term(), env)) {
+                    (true, _) => Node::el(Tag::Rect)
+                        .class([Class::Mark, Class::Nf])
+                        .attr(Attr::X(f(x - mr)))
+                        .attr(Attr::Y(f(y - mr)))
+                        .attr(Attr::Width(Num::Js(mr * 2.0)))
+                        .attr(Attr::Height(Num::Js(mr * 2.0))),
+                    (false, None) => {
+                        let r = mr + Px::new(0.8);
+                        Node::el(Tag::Path)
+                            .class([Class::Mark, Class::Whnf].into_iter().chain(open))
+                            .attr(Attr::D(Trace::tight(vec![
+                                Seg::Move(f(x), f(y - r)),
+                                Seg::Line(f(x + r), f(y)),
+                                Seg::Line(f(x), f(y + r)),
+                                Seg::Line(f(x - r), f(y)),
+                                Seg::Close,
+                            ])))
+                    }
+                    (false, Some(_)) => Node::el(Tag::Circle)
+                        .class([Class::Mark, Class::Red].into_iter().chain(open))
+                        .attr(Attr::Cx(f(x)))
+                        .attr(Attr::Cy(f(y)))
+                        .attr(Attr::R(Num::Js(mr))),
+                }]),
+        )
     }
 
     pub fn svg(&self) -> &Node {

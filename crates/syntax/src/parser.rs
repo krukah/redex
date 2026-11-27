@@ -131,7 +131,10 @@ impl Parser {
             items.push(self.term()?);
         }
         self.expect(")")?;
-        let last = items.pop().expect("a tuple holds a term");
-        Ok(items.into_iter().rev().fold(last, |t, a| Term::pair(a, t)))
+        Ok(items
+            .into_iter()
+            .rev()
+            .reduce(|t, a| Term::pair(a, t))
+            .expect("a tuple holds a term"))
     }
 }

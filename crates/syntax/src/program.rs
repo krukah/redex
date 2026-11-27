@@ -43,9 +43,7 @@ impl Program {
         if name.prim().is_some() || Prim::alias(name.as_str()).is_some() {
             return Err(Failure::new(format!("{name} is built in and cannot be redefined.")).at(line));
         }
-        let t = Parser::parse(src).map_err(|e| e.at(line))?;
-        let t = Self::resolve(&t, env, &HashSet::new());
-        env.set(name, t);
+        env.set(name, Self::resolve(&Parser::parse(src).map_err(|e| e.at(line))?, env, &HashSet::new()));
         Ok(())
     }
 

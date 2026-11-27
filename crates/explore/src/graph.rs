@@ -85,12 +85,14 @@ impl Graph {
                 continue;
             }
             let key = next.key();
-            let j = self
-                .index()
-                .get(&key)
-                .copied()
-                .unwrap_or_else(|| self.admit(key, next, i, r.kind(), queue));
-            let edge = Edge::new(i, j, r.kind());
+            let edge = Edge::new(
+                i,
+                self.index()
+                    .get(&key)
+                    .copied()
+                    .unwrap_or_else(|| self.admit(key, next, i, r.kind(), queue)),
+                r.kind(),
+            );
             if !self.edges().contains(&edge) {
                 self.edges_mut().push(edge);
             }

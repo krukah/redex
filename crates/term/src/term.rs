@@ -255,15 +255,15 @@ impl Term {
     /// One line per term, ids relative to `base`: the format of `fixtures/engine`.
     pub fn dump(&self, base: Uid) -> String {
         let rel = |u: Uid| u.since(base);
-        let label = match self.shape() {
-            Shape::Var(n) | Shape::Const(n) | Shape::Lam(n, _) | Shape::Let(n, ..) => n.to_string(),
-            Shape::Proj(i, _) => i.to_string(),
-            Shape::App(..) | Shape::Pair(..) => String::new(),
-        };
         let kids = self.kids().iter().map(|(_, k)| k.dump(base)).collect::<Vec<String>>();
         format!(
-            "{}:{label}#{}{}{}{}{}",
+            "{}:{}#{}{}{}{}{}",
             self.shape().kind(),
+            match self.shape() {
+                Shape::Var(n) | Shape::Const(n) | Shape::Lam(n, _) | Shape::Let(n, ..) => n.to_string(),
+                Shape::Proj(i, _) => i.to_string(),
+                Shape::App(..) | Shape::Pair(..) => String::new(),
+            },
             rel(self.uid()),
             self.from().map(|f| format!("<{}", rel(f))).unwrap_or_default(),
             self.mark().map(|m| format!("!{}", m.name())).unwrap_or_default(),

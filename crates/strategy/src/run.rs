@@ -31,8 +31,10 @@ impl Run {
                 };
             }
         }
-        let status = if strategy.next(&t, env).is_some() { Status::Cap } else { Status::Done };
-        Self { rows, status }
+        Self {
+            status: if strategy.next(&t, env).is_some() { Status::Cap } else { Status::Done },
+            rows,
+        }
     }
 
     pub fn rows(&self) -> &[Row] {

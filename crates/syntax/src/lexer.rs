@@ -69,24 +69,36 @@ impl Lexer {
         let j = (i..self.0.len())
             .find(|&j| !self.0[j].is_ascii_digit())
             .unwrap_or(self.0.len());
-        let digits = self.0[i..j].iter().collect::<String>();
-        (Some(Token::Num(digits.parse::<f64>().unwrap_or(f64::INFINITY))), j)
+        (
+            Some(Token::Num(
+                self.0[i..j]
+                    .iter()
+                    .collect::<String>()
+                    .parse::<f64>()
+                    .unwrap_or(f64::INFINITY),
+            )),
+            j,
+        )
     }
 
     fn word(&self, i: usize) -> (Option<Token>, usize) {
-        let dotted = self.0[i].is_ascii_uppercase();
         let j = (i + 1..self.0.len())
             .find(|&j| {
-                !Self::id_char(self.0[j]) && !(dotted && self.0[j] == '.' && self.at(j + 1).is_some_and(Self::id_start))
+                !Self::id_char(self.0[j])
+                    && !(self.0[i].is_ascii_uppercase()
+                        && self.0[j] == '.'
+                        && self.at(j + 1).is_some_and(Self::id_start))
             })
             .unwrap_or(self.0.len());
         let w = self.0[i..j].iter().collect::<String>();
-        let tok = match w.as_str() {
-            "fun" => Token::Lambda,
-            "let" => Token::Let,
-            "in" => Token::In,
-            _ => Token::Id(Name::from(w.as_str())),
-        };
-        (Some(tok), j)
+        (
+            Some(match w.as_str() {
+                "fun" => Token::Lambda,
+                "let" => Token::Let,
+                "in" => Token::In,
+                _ => Token::Id(Name::from(w.as_str())),
+            }),
+            j,
+        )
     }
 }

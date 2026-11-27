@@ -38,10 +38,12 @@ impl Plot {
         let mut spots = vec![Spot::new(Px::ZERO, Px::ZERO, Form::Red); g.len()];
         for (d, row) in rows.iter().enumerate() {
             let row = Self::order(g, row, Depth::new(d), &spots);
-            let x0 = Self::ML + (span - Self::GX * (row.len() as f64 - 1.0)) / 2.0;
             row.iter().enumerate().for_each(|(i, &v)| {
-                spots[v.get()] =
-                    Spot::new(x0 + Self::GX * i as f64, Self::row(Depth::new(d)), Form::of(g.vertex(v), env));
+                spots[v.get()] = Spot::new(
+                    (Self::ML + (span - Self::GX * (row.len() as f64 - 1.0)) / 2.0) + Self::GX * i as f64,
+                    Self::row(Depth::new(d)),
+                    Form::of(g.vertex(v), env),
+                );
             });
         }
         Self {
@@ -100,11 +102,17 @@ impl Plot {
             .iter()
             .enumerate()
             .map(|(i, e)| {
-                let pi = g.edges()[..i].iter().filter(|o| o.joins(e.from(), e.to())).count() as f64;
-                let count = g.edges().iter().filter(|o| o.joins(e.from(), e.to())).count() as f64;
-                let off = Px::new((pi - (count - 1.0) / 2.0) * 12.0);
-                let (da, db) = (g.vertex(e.from()).depth(), g.vertex(e.to()).depth());
-                Self::route(&spots[e.from().get()], &spots[e.to().get()], e.from() == e.to(), (da, db), off)
+                Self::route(
+                    &spots[e.from().get()],
+                    &spots[e.to().get()],
+                    e.from() == e.to(),
+                    (g.vertex(e.from()).depth(), g.vertex(e.to()).depth()),
+                    Px::new(
+                        (g.edges()[..i].iter().filter(|o| o.joins(e.from(), e.to())).count() as f64
+                            - (g.edges().iter().filter(|o| o.joins(e.from(), e.to())).count() as f64 - 1.0) / 2.0)
+                            * 12.0,
+                    ),
+                )
             })
             .collect()
     }
