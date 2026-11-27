@@ -52,7 +52,7 @@ impl Case {
     /// The fixture's view of the source, computed by the Rust engine.
     fn study(&self) -> Value {
         let base = Term::var("_").uid();
-        let prog = Program::parse(self.src()).expect("fixtures parse");
+        let prog = Program::parse(&Source::from(self.src())).expect("fixtures parse");
         let (term, env) = (prog.term(), prog.env());
         let mut fv = term.fv().iter().map(ToString::to_string).collect::<Vec<String>>();
         fv.sort();
@@ -192,7 +192,7 @@ fn every_fixture_matches_the_js_engine() {
 #[test]
 fn parse_errors_read_as_in_js() {
     Case::errors().into_iter().for_each(|(src, want)| {
-        let got = match Program::parse(&src) {
+        let got = match Program::parse(&Source::from(src.as_str())) {
             Ok(p) => json!({
                 "src": src,
                 "error": null,

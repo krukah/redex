@@ -19,14 +19,6 @@ impl Form {
         }
     }
 
-    pub fn class(self) -> &'static str {
-        match self {
-            Self::Red => "red",
-            Self::Whnf => "whnf",
-            Self::Nf => "nf",
-        }
-    }
-
     pub fn label(self) -> &'static str {
         match self {
             Self::Red => "reducible",

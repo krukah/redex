@@ -37,7 +37,7 @@ impl Plot {
                 .fold(f64::NEG_INFINITY, f64::max);
         let mut spots = vec![Spot::new(Px::ZERO, Px::ZERO, Form::Red); g.len()];
         for (d, row) in rows.iter().enumerate() {
-            let row = Self::order(g, row, d, &spots);
+            let row = Self::order(g, row, Depth::new(d), &spots);
             let x0 = Self::ML + (span - Self::GX * (row.len() as f64 - 1.0)) / 2.0;
             row.iter().enumerate().for_each(|(i, &v)| {
                 spots[v.get()] =
@@ -68,8 +68,8 @@ impl Plot {
     }
 
     /// A row sorted by the mean x of each vertex's parents one row up (a stable sort).
-    fn order(g: &Graph, row: &[Id], d: usize, spots: &[Spot]) -> Vec<Id> {
-        if d == 0 {
+    fn order(g: &Graph, row: &[Id], d: Depth, spots: &[Spot]) -> Vec<Id> {
+        if d == Depth::START {
             return row.to_vec();
         }
         let mut keyed = row

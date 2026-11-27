@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use markup::*;
-use units::*;
 use wasm_bindgen::JsCast;
 use web_sys::Element;
 
@@ -95,11 +94,6 @@ impl Doc {
     pub fn children(el: &Element) -> Vec<Element> {
         let list = el.children();
         (0..list.length()).filter_map(|i| list.item(i)).collect()
-    }
-
-    /// The element's box, in pixels from the viewport's corner.
-    pub fn top(el: &Element) -> Px {
-        Px::new(el.get_bounding_client_rect().top())
     }
 
     /// Replaces an element's children with the markup.

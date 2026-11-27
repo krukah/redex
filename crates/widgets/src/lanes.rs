@@ -62,7 +62,7 @@ impl Track {
         match pick.src() {
             None if !session.loaded() => None,
             None => Some((session.start(), session.env())),
-            Some(src) => Program::parse(src).ok().map(|p| (p.term().clone(), p.env().clone())),
+            Some(src) => Program::parse(&src).ok().map(|p| (p.term().clone(), p.env().clone())),
         }
     }
 

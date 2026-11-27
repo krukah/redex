@@ -13,11 +13,16 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn parse(src: &str) -> Result<Self, Failure> {
+    pub fn parse(src: &Source) -> Result<Self, Failure> {
         let mut env = Env::default();
         let mut notes = Vec::new();
         let mut body = Vec::new();
-        for (i, line) in src.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).enumerate() {
+        for (i, line) in src
+            .as_str()
+            .split('\n')
+            .map(|l| l.strip_suffix('\r').unwrap_or(l))
+            .enumerate()
+        {
             match (Line::note(line), Line::def(line)) {
                 (Some(note), _) => notes.push(Note::from(note)),
                 (None, Some((name, def))) => Self::define(&mut env, i + 1, &Name::from(name), def)?,

@@ -47,14 +47,14 @@ impl Motion {
     }
 
     /// The one place that calls `Element::animate`.
-    fn tween(el: &Element, frames: &[&[(&str, JsValue)]], o: Tween) -> Self {
+    fn tween(el: &Element, frames: &[&[(Prop, JsValue)]], o: Tween) -> Self {
         let el = el.clone();
         let frames = frames
             .iter()
             .map(|frame| {
                 let obj = js_sys::Object::new();
                 frame.iter().for_each(|(k, v)| {
-                    let _ = js_sys::Reflect::set(&obj, &JsValue::from_str(k), v);
+                    let _ = js_sys::Reflect::set(&obj, &JsValue::from_str(k.key()), v);
                 });
                 obj
             })
@@ -106,7 +106,7 @@ impl Motion {
     pub fn enter(el: &Element, o: Tween) -> Self {
         Self::tween(
             el,
-            &[&[("opacity", 0.into())], &[("opacity", 1.into())]],
+            &[&[(Prop::Opacity, 0.into())], &[(Prop::Opacity, 1.into())]],
             o.over(Tween::default().ease(Ease::Enter)),
         )
     }
@@ -115,11 +115,14 @@ impl Motion {
     pub fn exit(el: &Element, o: Tween) -> Self {
         let from = web_sys::window()
             .and_then(|w| w.get_computed_style(el).ok().flatten())
-            .and_then(|cs| cs.get_property_value("opacity").ok())
+            .and_then(|cs| cs.get_property_value(Prop::Opacity.key()).ok())
             .unwrap_or_default();
         let fade = Self::tween(
             el,
-            &[&[("opacity", JsValue::from_str(&from))], &[("opacity", 0.into())]],
+            &[
+                &[(Prop::Opacity, JsValue::from_str(&from))],
+                &[(Prop::Opacity, 0.into())],
+            ],
             o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::Exit)).keep(),
         );
         let el = el.clone();
@@ -134,8 +137,8 @@ impl Motion {
         Self::tween(
             el,
             &[
-                &[("transform", Self::translate(dx, dy))],
-                &[("transform", "none".into())],
+                &[(Prop::Transform, Self::translate(dx, dy))],
+                &[(Prop::Transform, "none".into())],
             ],
             o,
         )
@@ -150,8 +153,8 @@ impl Motion {
         Self::tween(
             el,
             &[
-                &[("width", px(from.width())), ("height", px(from.height()))],
-                &[("width", px(to.width())), ("height", px(to.height()))],
+                &[(Prop::Width, px(from.width())), (Prop::Height, px(from.height()))],
+                &[(Prop::Width, px(to.width())), (Prop::Height, px(to.height()))],
             ],
             o,
         )
@@ -161,7 +164,10 @@ impl Motion {
     pub fn draw(path: &Element, o: Tween) -> Self {
         Self::tween(
             path,
-            &[&[("strokeDashoffset", 1.into())], &[("strokeDashoffset", 0.into())]],
+            &[
+                &[(Prop::StrokeDashoffset, 1.into())],
+                &[(Prop::StrokeDashoffset, 0.into())],
+            ],
             o.over(Tween::default().ease(Ease::Enter)),
         )
     }
@@ -171,8 +177,8 @@ impl Motion {
         Self::tween(
             el,
             &[
-                &[("transform", "none".into())],
-                &[("transform", Self::translate(dx, dy))],
+                &[(Prop::Transform, "none".into())],
+                &[(Prop::Transform, Self::translate(dx, dy))],
             ],
             o.keep(),
         )
@@ -182,8 +188,8 @@ impl Motion {
     pub fn crossfade(a: &Element, b: &Element, o: Tween) -> Self {
         let o = o.over(Tween::default().ms(Self::BEAT * 0.45).ease(Ease::Exit)).keep();
         Self::all(vec![
-            Self::tween(a, &[&[("opacity", 1.into())], &[("opacity", 0.into())]], o),
-            Self::tween(b, &[&[("opacity", 0.into())], &[("opacity", 1.into())]], o),
+            Self::tween(a, &[&[(Prop::Opacity, 1.into())], &[(Prop::Opacity, 0.into())]], o),
+            Self::tween(b, &[&[(Prop::Opacity, 0.into())], &[(Prop::Opacity, 1.into())]], o),
         ])
     }
 

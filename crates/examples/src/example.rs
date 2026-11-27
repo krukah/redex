@@ -1,4 +1,5 @@
 use rules::*;
+use syntax::*;
 
 /// An example program. The rule examples carry their rule, a one-line description and the schema
 /// as the deck shows it; the rest carry a label. `eta` asks the graph to include η.
@@ -10,7 +11,7 @@ pub struct Example {
     sub: Option<&'static str>,
     schema: Option<&'static str>,
     eta: bool,
-    src: &'static str,
+    text: &'static str,
 }
 
 impl Example {
@@ -22,7 +23,7 @@ impl Example {
             sub: Some("rename a binder"),
             schema: Some("λx. t ≡ λy. t[x:=y]"),
             eta: false,
-            src: r"-- The argument y is free. Dropping it under λy would capture it.
+            text: r"-- The argument y is free. Dropping it under λy would capture it.
 -- Fire β: the engine renames the inner binder first.
 -- Click any binder to rename it yourself. The links never move.
 (λx. λy. x) y",
@@ -34,7 +35,7 @@ impl Example {
             sub: Some("apply a function"),
             schema: Some("(λx. t) s ⟶ t[x:=s]"),
             eta: false,
-            src: r"-- f appears twice, so the argument is copied twice.
+            text: r"-- f appears twice, so the argument is copied twice.
 (λf. f (f a)) (λy. (y, y))",
         },
         Self {
@@ -44,7 +45,7 @@ impl Example {
             sub: Some("drop a wrapper"),
             schema: Some("λx. f x ⟶ f"),
             eta: true,
-            src: r"-- Two η-redexes around a β-redex. Every route ends at g.
+            text: r"-- Two η-redexes around a β-redex. Every route ends at g.
 -- Step skips η, as Lean does: η is for comparing terms, not computing.
 -- Click the η marks yourself.
 λz. (λy. g y) z",
@@ -56,7 +57,7 @@ impl Example {
             sub: Some("unfold a definition"),
             schema: Some("c ⟶ body of c"),
             eta: false,
-            src: r"-- Constants unfold to their definitions, one at a time.
+            text: r"-- Constants unfold to their definitions, one at a time.
 def id := λx. x
 def twice := λf. λx. f (f x)
 twice id a",
@@ -68,7 +69,7 @@ twice id a",
             sub: Some("inline a let"),
             schema: Some("let x := v; t ⟶ t[x:=v]"),
             eta: false,
-            src: r"-- let x := v; t acts like (λx. t) v, but it is a separate rule.
+            text: r"-- let x := v; t acts like (λx. t) v, but it is a separate rule.
 let p := (a, b); (p.2, p.1)",
         },
         Self {
@@ -78,7 +79,7 @@ let p := (a, b); (p.2, p.1)",
             sub: Some("eliminate a constructor"),
             schema: Some("Nat.rec z s (succ n) ⟶ s n (Nat.rec z s n)"),
             eta: false,
-            src: r"-- The recursor fires only when its target is a constructor.
+            text: r"-- The recursor fires only when its target is a constructor.
 def double := λn. Nat.rec 0 (λk r. succ (succ r)) n
 double 2",
         },
@@ -89,7 +90,7 @@ double 2",
             sub: Some("project from a pair"),
             schema: Some("(a, b).1 ⟶ a"),
             eta: false,
-            src: r"-- Projections fire when they meet a pair.
+            text: r"-- Projections fire when they meet a pair.
 (λp. (p.2, p.1)) (a, b)",
         },
     ];
@@ -102,7 +103,7 @@ double 2",
             sub: None,
             schema: None,
             eta: true,
-            src: r"-- (p.1, p.2) is p. Here η and two π steps reach the same pair.
+            text: r"-- (p.1, p.2) is p. Here η and two π steps reach the same pair.
 ((a, b).1, (a, b).2)",
         },
         Self {
@@ -112,7 +113,7 @@ double 2",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- Two redexes, two orders, one answer.
+            text: r"-- Two redexes, two orders, one answer.
 (λx. x x) ((λy. y) a)",
         },
         Self {
@@ -122,7 +123,7 @@ double 2",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- Ω reduces to itself, so it has no normal form.
+            text: r"-- Ω reduces to itself, so it has no normal form.
 (λx. x x) (λx. x x)",
         },
         Self {
@@ -132,7 +133,7 @@ double 2",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- The inner redex loops forever. The outer one throws it away.
+            text: r"-- The inner redex loops forever. The outer one throws it away.
 (λx. z) ((λw. w w) (λw. w w))",
         },
         Self {
@@ -142,7 +143,7 @@ double 2",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- Two binders in the way. Both get renamed before β.
+            text: r"-- Two binders in the way. Both get renamed before β.
 (λx. λy. λz. x y z) (y z)",
         },
         Self {
@@ -152,7 +153,7 @@ double 2",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- Numbers as iterators: n f x applies f n times.
+            text: r"-- Numbers as iterators: n f x applies f n times.
 def two := λf. λx. f (f x)
 def plus := λm. λn. λf. λx. m f (n f x)
 plus two two",
@@ -164,7 +165,7 @@ plus two two",
             sub: None,
             schema: None,
             eta: false,
-            src: r"-- δ, β, ζ, π and ι in one term.
+            text: r"-- δ, β, ζ, π and ι in one term.
 def double := λn. Nat.rec 0 (λk r. succ (succ r)) n
 let p := (double 1, b); p.1",
         },
@@ -202,8 +203,12 @@ let p := (double 1, b); p.1",
         self.eta
     }
 
-    pub fn src(&self) -> &'static str {
-        self.src
+    fn text(&self) -> &'static str {
+        self.text
+    }
+
+    pub fn src(&self) -> Source {
+        Source::from(self.text())
     }
 }
 

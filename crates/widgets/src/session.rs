@@ -48,7 +48,7 @@ impl Entry {
 struct Program {
     env: Env,
     notes: Vec<Note>,
-    src: String,
+    src: Source,
     example: Option<Example>,
     eta: bool,
     hist: Vec<Entry>,
@@ -65,7 +65,7 @@ impl Program {
         &self.notes
     }
 
-    fn src(&self) -> &String {
+    fn src(&self) -> &Source {
         &self.src
     }
 
@@ -145,7 +145,7 @@ impl Session {
     }
 
     /// The source the program was loaded from.
-    pub fn src(&self) -> String {
+    pub fn src(&self) -> Source {
         self.program().borrow().src().clone()
     }
 
@@ -208,13 +208,13 @@ impl Session {
     }
 
     /// Fails with a readable message when the source does not parse.
-    pub fn load(&self, src: &str, example: Option<Example>, eta: bool) -> Result<(), Failure> {
+    pub fn load(&self, src: &Source, example: Option<Example>, eta: bool) -> Result<(), Failure> {
         let prog = syntax::Program::parse(src)?;
         prog.env().iter().for_each(|(name, _)| Consts::add(name));
         *self.program().borrow_mut() = Program {
             env: prog.env().clone(),
             notes: prog.notes().to_vec(),
-            src: src.to_string(),
+            src: src.clone(),
             example,
             eta,
             hist: vec![Entry::new(prog.term().clone(), None, None)],
@@ -226,7 +226,7 @@ impl Session {
     }
 
     pub fn load_example(&self, ex: Example) {
-        let _ = self.load(ex.src(), Some(ex), ex.eta());
+        let _ = self.load(&ex.src(), Some(ex), ex.eta());
     }
 
     pub fn push(&self, entry: Entry) {

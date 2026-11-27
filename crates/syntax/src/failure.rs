@@ -8,7 +8,7 @@ impl Failure {
     }
 
     /// The same failure, placed on a line of the source.
-    pub fn at(self, line: usize) -> Self {
+    pub(crate) fn at(self, line: usize) -> Self {
         Self(format!("Line {line}: {}", self.0))
     }
 }

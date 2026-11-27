@@ -11,12 +11,12 @@ struct Engine;
 
 impl Engine {
     fn run(src: &str, strategy: Strategy, cap: usize) -> Run {
-        let p = Program::parse(src).expect("parses");
+        let p = Program::parse(&Source::from(src)).expect("parses");
         Run::new(p.term(), p.env(), strategy, Cap::new(cap))
     }
 
-    fn src(id: &str) -> &'static str {
-        Example::find(id).expect("an example").src()
+    fn src(id: &str) -> String {
+        Example::find(id).expect("an example").src().to_string()
     }
 
     fn kinds(run: &Run) -> Vec<Kind> {
@@ -26,11 +26,11 @@ impl Engine {
 
 #[test]
 fn every_example_and_race_term_parses() {
-    Example::all().for_each(|e| assert!(Program::parse(e.src()).is_ok(), "{}", e.id()));
+    Example::all().for_each(|e| assert!(Program::parse(&e.src()).is_ok(), "{}", e.id()));
     Race::ALL
         .iter()
         .filter_map(Race::src)
-        .for_each(|s| assert!(Program::parse(s).is_ok(), "{s}"));
+        .for_each(|s| assert!(Program::parse(&s).is_ok(), "{s}"));
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn normal_forms_of_the_examples() {
     ]
     .into_iter()
     .for_each(|(id, nf)| {
-        let r = Engine::run(Engine::src(id), Strategy::Normal, 200);
+        let r = Engine::run(&Engine::src(id), Strategy::Normal, 200);
         assert_eq!(r.status(), Status::Done, "{id}");
         assert_eq!(r.last().text(), nf, "{id}");
     });
@@ -60,13 +60,13 @@ fn normal_forms_of_the_examples() {
 
 #[test]
 fn omega_has_no_normal_form() {
-    assert_eq!(Engine::run(Engine::src("omega"), Strategy::Normal, 30).status(), Status::Cap);
+    assert_eq!(Engine::run(&Engine::src("omega"), Strategy::Normal, 30).status(), Status::Cap);
 }
 
 #[test]
 fn each_rule_fires_in_its_own_example() {
     assert_eq!(
-        Engine::kinds(&Engine::run(Engine::src("delta"), Strategy::Normal, 200)),
+        Engine::kinds(&Engine::run(&Engine::src("delta"), Strategy::Normal, 200)),
         [
             Kind::Delta,
             Kind::Beta,
@@ -78,10 +78,10 @@ fn each_rule_fires_in_its_own_example() {
         ]
     );
     assert_eq!(
-        Engine::kinds(&Engine::run(Engine::src("zeta"), Strategy::Normal, 200)),
+        Engine::kinds(&Engine::run(&Engine::src("zeta"), Strategy::Normal, 200)),
         [Kind::Zeta, Kind::Proj, Kind::Proj]
     );
-    assert!(Engine::kinds(&Engine::run(Engine::src("iota"), Strategy::Normal, 200)).contains(&Kind::Iota));
+    assert!(Engine::kinds(&Engine::run(&Engine::src("iota"), Strategy::Normal, 200)).contains(&Kind::Iota));
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn alpha_equivalent_terms_share_a_key() {
 #[test]
 fn confluence_no_example_graph_has_two_normal_forms() {
     Example::all().for_each(|e| {
-        let p = Program::parse(e.src()).expect("parses");
+        let p = Program::parse(&e.src()).expect("parses");
         let g = Graph::explore(p.term(), p.env(), e.eta(), Cap::new(70));
         assert!(g.normal() <= 1, "{}", e.id());
     });
@@ -131,7 +131,7 @@ fn parser_accepts_lean_syntax() {
     assert_eq!(Parser::parse("fun x y => x").expect("parses").text(), "λx. λy. x");
     assert_eq!(Parser::parse("let p := (a, b, c); p.2.1").expect("parses").text(), "let p := (a, (b, c)); p.2.1");
     assert_eq!(
-        Program::parse("Nat.rec 0 (fun k r => Nat.succ r) 3")
+        Program::parse(&Source::from("Nat.rec 0 (fun k r => Nat.succ r) 3"))
             .expect("parses")
             .term()
             .text(),
@@ -160,7 +160,7 @@ fn provenance_beta_copies_point_back_to_the_argument() {
 #[test]
 fn every_rule_binds_exactly_the_pattern_variables_its_schema_mentions() {
     Example::all().for_each(|e| {
-        let p = Program::parse(e.src()).expect("parses");
+        let p = Program::parse(&e.src()).expect("parses");
         p.term().redexes(p.env()).iter().for_each(|r| {
             let node = p.term().at(r.path()).expect("a redex inside its term");
             let vars = r.kind().schema(node).vars();

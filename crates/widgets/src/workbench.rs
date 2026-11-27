@@ -384,7 +384,7 @@ impl Bench {
             Doc::fill(&list, &Node::list(defs));
         }
         if let Some(src) = self.source() {
-            src.set_value(&self.session().src());
+            src.set_value(self.session().src().as_str());
         }
         if let Some(err) = self.q(&Class::Err.into()) {
             Doc::hide(&err, true);
@@ -1070,7 +1070,7 @@ impl Bench {
             .as_ref()
             .map(web_sys::HtmlTextAreaElement::value)
             .unwrap_or_default();
-        if let Err(e) = self.session().load(&src, None, self.session().eta()) {
+        if let Err(e) = self.session().load(&Source::from(src), None, self.session().eta()) {
             if let Some(err) = self.q(&Class::Err.into()) {
                 err.set_text_content(Some(&e.to_string()));
                 Doc::hide(&err, false);

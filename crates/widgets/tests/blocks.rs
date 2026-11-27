@@ -44,7 +44,7 @@ impl Fixture {
 
     fn check(&self) -> Vec<String> {
         let base = Term::var("_").uid();
-        let prog = Program::parse(self.1["src"].as_str().expect("a source")).expect("parses");
+        let prog = Program::parse(&Source::from(self.1["src"].as_str().expect("a source"))).expect("parses");
         let (term, env) = (prog.term(), prog.env());
         let want = |v: &Value| v.as_str().expect("markup").to_string();
         let mut out = vec![

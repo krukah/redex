@@ -4,6 +4,7 @@ mod first;
 mod ghost;
 mod join;
 mod motion;
+mod prop;
 mod settle;
 mod tween;
 
@@ -13,5 +14,6 @@ pub use first::*;
 pub use ghost::*;
 pub use join::*;
 pub use motion::*;
+pub use prop::*;
 pub use settle::*;
 pub use tween::*;

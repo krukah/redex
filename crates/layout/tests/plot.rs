@@ -42,7 +42,7 @@ impl Drawn {
     }
 
     fn check(&self, name: &str) -> Vec<String> {
-        let prog = Program::parse(self.0["src"].as_str().expect("a source")).expect("parses");
+        let prog = Program::parse(&Source::from(self.0["src"].as_str().expect("a source"))).expect("parses");
         self.0["graphs"]
             .as_array()
             .expect("two drawings")

@@ -35,7 +35,7 @@ impl Tiles {
             )
         });
         let more = Example::MORE.iter().map(|m| {
-            let p = Program::parse(m.src()).expect("examples parse");
+            let p = Program::parse(&m.src()).expect("examples parse");
             let t = Thumb::new(p.term(), p.env(), m.eta());
             let caption = p.notes().first().map(ToString::to_string).unwrap_or_default();
             Self::tile(
