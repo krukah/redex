@@ -54,10 +54,9 @@ impl Chart {
 
     pub fn new(start: &Term, env: &term::Env, eta: bool, plate: Plate) -> Self {
         let graph = Graph::explore(start, env, eta, Self::CAP);
-        let plot = Plot::new(&graph, env);
         Self {
+            plot: Plot::new(&graph, env),
             graph,
-            plot,
             env: env.clone(),
             plate,
         }
@@ -76,68 +75,85 @@ impl Chart {
     }
 
     pub fn svg(&self, sel: Option<Id>) -> Node {
-        let js = Num::Js;
-        let px = Px::new;
-        let grid = self.plot().rows().map(|d| {
-            let y = Plot::row(d);
-            Node::list([
-                Node::el(Tag::Line)
-                    .class([Class::Gridline])
-                    .attr(Attr::X1(js(Plot::ML - px(18.0))))
-                    .attr(Attr::X2(js(self.plot().width() - px(12.0))))
-                    .attr(Attr::Y1(js(y)))
-                    .attr(Attr::Y2(js(y))),
-                Node::el(Tag::Text)
-                    .class([Class::Ax])
-                    .attr(Attr::X(js(Plot::ML - px(26.0))))
-                    .attr(Attr::Y(js(y)))
-                    .kid(Node::text(d)),
-            ])
-        });
-        let head = Node::el(Tag::Text)
+        Node::list([
+            Node::el(Tag::Defs).kids(Self::KINDS.iter().map(|k| self.marker(*k))),
+            Node::el(Tag::G)
+                .class([Class::Grid])
+                .kids(self.plot().rows().map(|d| self.gridline(d)))
+                .kid(Self::head()),
+            Node::el(Tag::G).class([Class::Routes]),
+            Node::el(Tag::G).class([Class::Edges]).kids(
+                self.graph()
+                    .edges()
+                    .iter()
+                    .zip(self.plot().routes())
+                    .map(|(e, d)| self.edge(e, d)),
+            ),
+            Node::el(Tag::G)
+                .class([Class::Nodes])
+                .kids(self.graph().vertices().map(|(i, v)| self.vertex(i, v, sel))),
+        ])
+    }
+
+    /// A row's rule and its step number on the axis.
+    fn gridline(&self, d: Depth) -> Node {
+        let (js, px, y) = (Num::Js, Px::new, Plot::row(d));
+        Node::list([
+            Node::el(Tag::Line)
+                .class([Class::Gridline])
+                .attr(Attr::X1(js(Plot::ML - px(18.0))))
+                .attr(Attr::X2(js(self.plot().width() - px(12.0))))
+                .attr(Attr::Y1(js(y)))
+                .attr(Attr::Y2(js(y))),
+            Node::el(Tag::Text)
+                .class([Class::Ax])
+                .attr(Attr::X(js(Plot::ML - px(26.0))))
+                .attr(Attr::Y(js(y)))
+                .kid(Node::text(d)),
+        ])
+    }
+
+    /// The axis title.
+    fn head() -> Node {
+        Node::el(Tag::Text)
             .class([Class::Ax, Class::Head])
-            .attr(Attr::X(js(Plot::ML - px(26.0))))
-            .attr(Attr::Y(js(Plot::MT - px(18.0))))
-            .kid(Node::text("steps"));
-        let edges = self.graph().edges().iter().zip(self.plot().routes()).map(|(e, d)| {
-            let title = if e.kind().ink() == Kind::Proj {
+            .attr(Attr::X(Num::Js(Plot::ML - Px::new(26.0))))
+            .attr(Attr::Y(Num::Js(Plot::MT - Px::new(18.0))))
+            .kid(Node::text("steps"))
+    }
+
+    fn edge(&self, e: &Edge, d: &Trace) -> Node {
+        Node::el(Tag::Path)
+            .class([Class::Ge, Class::Ink(e.kind())])
+            .attr(Attr::Source(e.from()))
+            .attr(Attr::Target(e.to()))
+            .attr(Attr::Style(Style::Row(self.graph().vertex(e.from()).depth())))
+            .attr(Attr::Unit)
+            .attr(Attr::D(d.clone()))
+            .attr(Attr::MarkerEnd(self.plate(), e.kind().ink()))
+            .kid(Node::el(Tag::Title).kid(if e.kind().ink() == Kind::Proj {
                 Node::text(Kind::Proj.glyph())
             } else {
                 Node::text(e.kind())
-            };
-            Node::el(Tag::Path)
-                .class([Class::Ge, Class::Ink(e.kind())])
-                .attr(Attr::Source(e.from()))
-                .attr(Attr::Target(e.to()))
-                .attr(Attr::Style(Style::Row(self.graph().vertex(e.from()).depth())))
-                .attr(Attr::Unit)
-                .attr(Attr::D(d.clone()))
-                .attr(Attr::MarkerEnd(self.plate(), e.kind().ink()))
-                .kid(Node::el(Tag::Title).kid(title))
-        });
-        let nodes = self.graph().vertices().map(|(i, v)| self.vertex(i, v, sel));
-        let markers = Self::KINDS.iter().map(|k| {
-            Node::el(Tag::Marker)
-                .attr(Attr::Marker(self.plate(), *k))
-                .attr(Attr::ViewBox(js(Px::ZERO), js(Px::ZERO), js(px(10.0)), js(px(10.0))))
-                .attr(Attr::RefX(js(px(8.0))))
-                .attr(Attr::RefY(js(px(5.0))))
-                .attr(Attr::MarkerWidth(js(px(5.5))))
-                .attr(Attr::MarkerHeight(js(px(5.5))))
-                .attr(Attr::Orient)
-                .kid(
-                    Node::el(Tag::Path)
-                        .attr(Attr::D(Self::arrowhead()))
-                        .attr(Attr::Style(Style::Fill(*k))),
-                )
-        });
-        Node::list([
-            Node::el(Tag::Defs).kids(markers),
-            Node::el(Tag::G).class([Class::Grid]).kids(grid).kid(head),
-            Node::el(Tag::G).class([Class::Routes]),
-            Node::el(Tag::G).class([Class::Edges]).kids(edges),
-            Node::el(Tag::G).class([Class::Nodes]).kids(nodes),
-        ])
+            }))
+    }
+
+    /// An arrowhead in a rule's ink.
+    fn marker(&self, k: Kind) -> Node {
+        let (js, px) = (Num::Js, Px::new);
+        Node::el(Tag::Marker)
+            .attr(Attr::Marker(self.plate(), k))
+            .attr(Attr::ViewBox(js(Px::ZERO), js(Px::ZERO), js(px(10.0)), js(px(10.0))))
+            .attr(Attr::RefX(js(px(8.0))))
+            .attr(Attr::RefY(js(px(5.0))))
+            .attr(Attr::MarkerWidth(js(px(5.5))))
+            .attr(Attr::MarkerHeight(js(px(5.5))))
+            .attr(Attr::Orient)
+            .kid(
+                Node::el(Tag::Path)
+                    .attr(Attr::D(Self::arrowhead()))
+                    .attr(Attr::Style(Style::Fill(k))),
+            )
     }
 
     /// `M0 0L10 5L0 10z`.
@@ -151,11 +167,11 @@ impl Chart {
         ])
     }
 
-    fn vertex(&self, i: Id, v: &Vertex, sel: Option<Id>) -> Node {
-        let js = Num::Js;
-        let (s, r, px) = (self.plot().spot(i), Plot::R, Px::new);
+    /// A vertex's mark: ○ reducible, ◇ weak head normal form, ■ normal form.
+    fn shape(&self, i: Id) -> Node {
+        let (js, px, r, s) = (Num::Js, Px::new, Plot::R, self.plot().spot(i));
         let (x, y) = (s.x(), s.y());
-        let mark = match s.form() {
+        match s.form() {
             Form::Nf => Node::el(Tag::Rect)
                 .class([Class::Mark, Class::Nf])
                 .attr(Attr::X(js(x - r)))
@@ -176,26 +192,23 @@ impl Chart {
                 .attr(Attr::Cx(js(x)))
                 .attr(Attr::Cy(js(y)))
                 .attr(Attr::R(js(r))),
-        };
-        let root = i == Id::ROOT;
-        let classes = [
-            Some(Class::Gn),
-            root.then_some(Class::Start),
-            v.open().then_some(Class::Open),
-            (sel == Some(i)).then_some(Class::Sel),
-        ]
-        .into_iter()
-        .flatten();
-        let size = v.term().size();
-        let ring = root.then(|| {
-            Node::el(Tag::Circle)
-                .class([Class::Ring])
-                .attr(Attr::Cx(js(x)))
-                .attr(Attr::Cy(js(y)))
-                .attr(Attr::R(js(r + px(4.0))))
-        });
+        }
+    }
+
+    fn vertex(&self, i: Id, v: &Vertex, sel: Option<Id>) -> Node {
+        let (js, px, r, s) = (Num::Js, Px::new, Plot::R, self.plot().spot(i));
+        let (x, y, root, size) = (s.x(), s.y(), i == Id::ROOT, v.term().size());
         Node::el(Tag::G)
-            .class(classes)
+            .class(
+                [
+                    Some(Class::Gn),
+                    root.then_some(Class::Start),
+                    v.open().then_some(Class::Open),
+                    (sel == Some(i)).then_some(Class::Sel),
+                ]
+                .into_iter()
+                .flatten(),
+            )
             .attr(Attr::Vertex(i))
             .attr(Attr::Style(Style::Row(v.depth())))
             .attr(Attr::Focusable)
@@ -215,8 +228,14 @@ impl Chart {
                     .attr(Attr::Cy(js(y)))
                     .attr(Attr::R(js(r + px(6.0)))),
             )
-            .kids(ring)
-            .kid(mark)
+            .kids(root.then(|| {
+                Node::el(Tag::Circle)
+                    .class([Class::Ring])
+                    .attr(Attr::Cx(js(x)))
+                    .attr(Attr::Cy(js(y)))
+                    .attr(Attr::R(js(r + px(4.0))))
+            }))
+            .kid(self.shape(i))
             .kid(
                 Node::el(Tag::Text)
                     .class([Class::Sz])
@@ -243,21 +262,24 @@ impl Chart {
 
     pub fn verdict(&self) -> String {
         let nf = self.graph().normal();
-        let finished = match (nf, self.graph().truncated()) {
-            (1, true) => "Every finished path so far ends at the same normal form.",
-            (1, false) => "Every path that finishes ends at the same normal form.",
-            _ => "",
-        };
-        let looping = match (self.graph().cyclic(), nf > 0) {
-            (true, true) => " Some paths loop instead of finishing.",
-            (true, false) => "No normal form: every path keeps going.",
-            (false, _) => "",
-        };
         if self.graph().edges().is_empty() {
-            "Already in normal form. Nothing to fire.".to_string()
-        } else {
-            format!("{finished}{looping}").trim().to_string()
+            return "Already in normal form. Nothing to fire.".to_string();
         }
+        format!(
+            "{}{}",
+            match (nf, self.graph().truncated()) {
+                (1, true) => "Every finished path so far ends at the same normal form.",
+                (1, false) => "Every path that finishes ends at the same normal form.",
+                _ => "",
+            },
+            match (self.graph().cyclic(), nf > 0) {
+                (true, true) => " Some paths loop instead of finishing.",
+                (true, false) => "No normal form: every path keeps going.",
+                (false, _) => "",
+            }
+        )
+        .trim()
+        .to_string()
     }
 
     pub fn pills(route: Option<Strategy>) -> Node {
@@ -285,53 +307,61 @@ impl Chart {
             .collect::<Vec<(usize, Id, Id)>>();
         let left = walked.len() + 1 < rows.len();
         let steps = Step::new(walked.last().map_or(0, |w| w.0));
-        let edges = self.graph().edges();
-        let paths = walked.iter().filter_map(|&(i, a, b)| {
-            edges
-                .iter()
-                .position(|e| e.joins(a, b) && Some(e.kind()) == rows[i].kind())
-                .or_else(|| edges.iter().position(|e| e.joins(a, b)))
-                .map(|e| {
-                    Node::el(Tag::Path)
-                        .class([Class::Band])
-                        .attr(Attr::D(self.plot().routes()[e].clone()))
-                })
-        });
         let end = find(rows[steps.get().min(rows.len() - 1)].term());
-        let ring = end.filter(|_| run.status() == Status::Done && !left).map(|e| {
-            let s = self.plot().spot(e);
-            Node::el(Tag::Circle)
-                .class([Class::BandEnd])
-                .attr(Attr::Cx(Num::Js(s.x())))
-                .attr(Attr::Cy(Num::Js(s.y())))
-                .attr(Attr::R(Num::Js(Plot::R + Px::new(9.0))))
-        });
         let label = strategy.label();
-        let note = match (left, run.status()) {
-            (true, _) => format!("{label} leaves the explored graph after {steps} steps."),
-            (false, Status::Done) => format!(
-                "{label}: {steps} step{} to a {}.",
-                if steps == Step::ONE { "" } else { "s" },
-                end.map_or("stop", |e| self.plot().spot(e).form().label())
+        (
+            Node::list(walked.iter().filter_map(|&(i, a, b)| self.hop(a, b, rows[i].kind()))).kids(
+                end.filter(|_| run.status() == Status::Done && !left)
+                    .map(|e| self.finish(e)),
             ),
-            (false, _) => format!("{label} never stops: it loops."),
-        };
-        (Node::list(paths).kids(ring), note)
+            match (left, run.status()) {
+                (true, _) => format!("{label} leaves the explored graph after {steps} steps."),
+                (false, Status::Done) => format!(
+                    "{label}: {steps} step{} to a {}.",
+                    if steps == Step::ONE { "" } else { "s" },
+                    end.map_or("stop", |e| self.plot().spot(e).form().label())
+                ),
+                (false, _) => format!("{label} never stops: it loops."),
+            },
+        )
+    }
+
+    /// A route's band along the edge from `a` to `b`, by the rule the route fired if there is one.
+    fn hop(&self, a: Id, b: Id, kind: Option<Kind>) -> Option<Node> {
+        let edges = self.graph().edges();
+        edges
+            .iter()
+            .position(|e| e.joins(a, b) && Some(e.kind()) == kind)
+            .or_else(|| edges.iter().position(|e| e.joins(a, b)))
+            .map(|e| {
+                Node::el(Tag::Path)
+                    .class([Class::Band])
+                    .attr(Attr::D(self.plot().routes()[e].clone()))
+            })
+    }
+
+    /// The ring where a finished route ends.
+    fn finish(&self, e: Id) -> Node {
+        let s = self.plot().spot(e);
+        Node::el(Tag::Circle)
+            .class([Class::BandEnd])
+            .attr(Attr::Cx(Num::Js(s.x())))
+            .attr(Attr::Cy(Num::Js(s.y())))
+            .attr(Attr::R(Num::Js(Plot::R + Px::new(9.0))))
     }
 
     pub fn tip(&self, i: Id) -> Node {
         let v = self.graph().vertex(i);
         let d = v.depth();
-        let meta = format!(
-            " · size {} · {d} step{} from the start",
-            v.term().size(),
-            if d == Depth::new(1) { "" } else { "s" }
-        );
         Node::list([
             Node::el(Tag::Div)
                 .class([Class::TipMeta])
                 .kid(Node::el(Tag::B).kid(Node::text(self.plot().spot(i).form().label())))
-                .kid(Node::text(meta)),
+                .kid(Node::text(format!(
+                    " · size {} · {d} step{} from the start",
+                    v.term().size(),
+                    if d == Depth::new(1) { "" } else { "s" }
+                ))),
             Node::el(Tag::Div).class([Class::Tm]).kid(Node::text(v.term().text())),
         ])
     }
@@ -342,10 +372,6 @@ impl Chart {
                 .kid(Node::text("Hover a mark to read its term. Click it to open it in the workbench."));
         };
         let v = self.graph().vertex(i);
-        let place = match v.depth() {
-            Depth::START => "Start term".to_string(),
-            d => format!("{d} step{} from the start on the shortest path", if d > Depth::new(1) { "s" } else { "" }),
-        };
         Node::list([
             Node::el(Tag::Div).class([Class::Scroll]).kid(
                 Node::el(Tag::Div)
@@ -355,7 +381,8 @@ impl Chart {
             Node::el(Tag::Div)
                 .class([Class::Row])
                 .kid(Node::el(Tag::Span).kid(Node::text(format!(
-                    "{place} · {} · size {}",
+                    "{} · {} · size {}",
+                    Self::place(v.depth()),
                     self.plot().spot(i).form().label(),
                     v.term().size()
                 ))))
@@ -368,6 +395,14 @@ impl Chart {
                         .kid(Node::text("Open in workbench")),
                 ),
         ])
+    }
+
+    /// Where a vertex sits, in words.
+    fn place(d: Depth) -> String {
+        match d {
+            Depth::START => "Start term".to_string(),
+            d => format!("{d} step{} from the start on the shortest path", if d > Depth::new(1) { "s" } else { "" }),
+        }
     }
 
     /// The start-to-here chain of a vertex, as history entries.
@@ -435,8 +470,12 @@ impl Board {
     }
 
     fn build(&self, start: &Term) {
-        let eta = self.eta().as_ref().is_some_and(web_sys::HtmlInputElement::checked);
-        *self.chart().borrow_mut() = Some(Chart::new(start, &self.session().env(), eta, self.plate()));
+        *self.chart().borrow_mut() = Some(Chart::new(
+            start,
+            &self.session().env(),
+            self.eta().as_ref().is_some_and(web_sys::HtmlInputElement::checked),
+            self.plate(),
+        ));
         self.sel().set(None);
         self.draw();
     }
@@ -460,14 +499,18 @@ impl Board {
                         .and_then(|d| d.trim().parse::<f64>().ok())
                         .unwrap_or(0.0)
             };
-            let grow = Doc::all(&svg, &Class::Gn.into())
-                .iter()
-                .map(|g| Motion::after(row(g), Motion::enter(g, Tween::default().ms(Ms::new(400.0)))))
-                .chain(Doc::all(&svg, &Class::Ge.into()).iter().map(|p| {
-                    Motion::after(row(p) + Ms::new(90.0), Motion::draw(p, Tween::default().ms(Ms::new(500.0))))
-                }))
-                .collect();
-            leptos::task::spawn_local(Motion::all(grow).play(Clock::default()));
+            leptos::task::spawn_local(
+                Motion::all(
+                    Doc::all(&svg, &Class::Gn.into())
+                        .iter()
+                        .map(|g| Motion::after(row(g), Motion::enter(g, Tween::default().ms(Ms::new(400.0)))))
+                        .chain(Doc::all(&svg, &Class::Ge.into()).iter().map(|p| {
+                            Motion::after(row(p) + Ms::new(90.0), Motion::draw(p, Tween::default().ms(Ms::new(500.0))))
+                        }))
+                        .collect(),
+                )
+                .play(Clock::default()),
+            );
             if let Some(stats) = self.q(&Class::Gstats.into()) {
                 stats.set_text_content(Some(&chart.stats()));
             }
@@ -530,8 +573,13 @@ impl Board {
             .iter()
             .for_each(|g| Doc::toggle(g, Class::Here, here.is_some() && Doc::read::<Id>(g, Data::Id) == here));
         Doc::all(&svg, &Class::Ge.into()).iter().for_each(|g| {
-            let edge = Doc::read::<Id>(g, Data::From).zip(Doc::read::<Id>(g, Data::To));
-            Doc::toggle(g, Class::Walked, edge.is_some_and(|e| walked.contains(&e)));
+            Doc::toggle(
+                g,
+                Class::Walked,
+                Doc::read::<Id>(g, Data::From)
+                    .zip(Doc::read::<Id>(g, Data::To))
+                    .is_some_and(|e| walked.contains(&e)),
+            );
         });
     }
 
@@ -559,8 +607,7 @@ impl Board {
         let left = (Px::new(r.left() - wrap.left() + r.width() / 2.0) - tw / 2.0)
             .max(Px::new(8.0))
             .min(Px::new(wrap.width()) - tw - Px::new(8.0));
-        let below = Px::new(r.top() - wrap.top()) < th + Px::new(12.0);
-        let top = if below {
+        let top = if Px::new(r.top() - wrap.top()) < th + Px::new(12.0) {
             Px::new(r.bottom() - wrap.top() + 6.0)
         } else {
             Px::new(r.top() - wrap.top()) - th - Px::new(6.0)
@@ -633,9 +680,8 @@ impl Board {
 
 #[component]
 pub fn Paths() -> impl IntoView {
-    let session = expect_context::<StoredValue<Session, LocalStorage>>().get_value();
     let board = Rc::new(Board {
-        session,
+        session: expect_context::<StoredValue<Session, LocalStorage>>().get_value(),
         anchor: NodeRef::new(),
         chart: RefCell::new(None),
         sel: Cell::new(None),
@@ -653,11 +699,10 @@ pub fn Paths() -> impl IntoView {
         Event::Step => me.mark(),
         Event::Reveal => {}
     });
-    let anchor = board.anchor();
     let [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10] = std::array::from_fn(|_| board.clone());
     let legend = |class: &[Class]| Attr::Class(class.to_vec()).to_string();
     view! {
-        <div class=Class::Gbar.to_string() node_ref=anchor on:click=move |e| b1.click(&e)>
+        <div class=Class::Gbar.to_string() node_ref=board.anchor() on:click=move |e| b1.click(&e)>
             <span class=Class::Gstats.to_string()></span>
             <span class=Class::Grow.to_string()></span>
             <label class=Class::Toggle.to_string()>
