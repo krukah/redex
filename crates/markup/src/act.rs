@@ -10,10 +10,13 @@ pub enum Act {
     Rebuild,
     Open,
     Race,
+    Trace,
+    Why,
+    Source,
 }
 
 impl Act {
-    const ALL: [Act; 9] = [
+    const ALL: [Act; 12] = [
         Self::Step,
         Self::Whnf,
         Self::Nf,
@@ -23,6 +26,9 @@ impl Act {
         Self::Rebuild,
         Self::Open,
         Self::Race,
+        Self::Trace,
+        Self::Why,
+        Self::Source,
     ];
 
     fn name(self) -> &'static str {
@@ -36,6 +42,9 @@ impl Act {
             Self::Rebuild => "rebuild",
             Self::Open => "open",
             Self::Race => "race",
+            Self::Trace => "trace",
+            Self::Why => "why",
+            Self::Source => "source",
         }
     }
 }

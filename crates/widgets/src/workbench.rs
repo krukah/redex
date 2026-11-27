@@ -380,6 +380,7 @@ impl Bench {
                 &Node::list(env.iter().map(|(n, b)| {
                     Node::el(Tag::Div)
                         .class([Class::DefRow, Class::Tm])
+                        .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text("def")))
                         .kid(
                             Node::el(Tag::Span)
                                 .class([Class::Block, Class::Const, Class::Def])
@@ -387,9 +388,12 @@ impl Bench {
                         )
                         .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
                         .kid(
-                            Node::el(Tag::Span)
-                                .attr(Attr::Def(n.clone()))
-                                .kid(Blocks::new(&env, false, false).node(b)),
+                            Node::el(Tag::Span).attr(Attr::Def(n.clone())).kid(
+                                Node::el(Tag::Span)
+                                    .class([Class::Block])
+                                    .attr(Attr::Uid(b.uid()))
+                                    .kid(Node::text(b.text())),
+                            ),
                         )
                 })),
             );
@@ -520,10 +524,18 @@ impl Bench {
 
     fn render_capture(&self) {
         let capture = self.session().capture();
-        let Some(panel) = self.q(&Class::Capture.into()) else {
+        let (Some(panel), Some(tab)) = (self.q(&Class::Capture.into()), self.q(&Query::is(Data::Act, &Act::Why)))
+        else {
             return;
         };
-        Doc::hide(&panel, capture.is_none());
+        let fresh = capture.is_some() && tab.has_attribute("hidden");
+        Doc::hide(&tab, capture.is_none());
+        if fresh {
+            self.show(Act::Why);
+        }
+        if capture.is_none() && Doc::has(&tab, Class::On) {
+            self.show(Act::Trace);
+        }
         let Some(capture) = capture else { return };
         if let (Some(stage), Some(line)) = (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into())) {
             Doc::fill(&line, &Blocks::new(&self.session().env(), false, false).node(&capture));
@@ -535,26 +547,26 @@ impl Bench {
         let (t, env, busy) = (self.session().term(), self.session().env(), self.session().busy());
         let (idx, last) = (self.session().idx(), self.session().last());
         let running = self.running().get();
+        if let Some(root) = self.root() {
+            let _ = root.set_attribute("aria-busy", if busy { "true" } else { "false" });
+        }
         let (n, w) = (Strategy::Normal.next(&t, &env).is_some(), Strategy::Whnf.next(&t, &env).is_some());
-        let set = |act: Act, disabled: bool, label: Option<&str>| {
+        let set = |act: Act, disabled: bool, stop: Option<bool>| {
             if let Some(b) = self.button(act) {
                 b.set_disabled(disabled);
-                if let Some(label) = label {
-                    b.set_text_content(Some(label));
+                if let Some(stop) = stop {
+                    Doc::toggle(&b, Class::Halt, stop);
+                    let _ = if stop {
+                        b.set_attribute("aria-label", "Stop")
+                    } else {
+                        b.remove_attribute("aria-label")
+                    };
                 }
             }
         };
         set(Act::Step, busy || !n, None);
-        set(
-            Act::Whnf,
-            if busy { running != Some(Mode::Whnf) } else { !w },
-            Some(if running == Some(Mode::Whnf) { "Stop" } else { "To WHNF" }),
-        );
-        set(
-            Act::Nf,
-            if busy { running != Some(Mode::Nf) } else { !n },
-            Some(if running == Some(Mode::Nf) { "Stop" } else { "Normalize" }),
-        );
+        set(Act::Whnf, if busy { running != Some(Mode::Whnf) } else { !w }, Some(running == Some(Mode::Whnf)));
+        set(Act::Nf, if busy { running != Some(Mode::Nf) } else { !n }, Some(running == Some(Mode::Nf)));
         set(Act::Back, busy || idx == Step::START, None);
         set(Act::Reset, busy || (idx == Step::START && last == Step::START), None);
     }
@@ -1118,8 +1130,38 @@ impl Bench {
         }
     }
 
+    /// Shows one view of the lower pane: the trace, why α fired, or the source editor.
+    fn show(&self, pane: Act) {
+        [
+            (Act::Trace, Class::Trace),
+            (Act::Why, Class::Capture),
+            (Act::Source, Class::Src),
+        ]
+        .into_iter()
+        .for_each(|(tab, panel)| {
+            if let Some(view) = self.q(&panel.into()) {
+                Doc::hide(&view, tab != pane);
+            }
+            if let Some(button) = self.q(&Query::is(Data::Act, &tab)) {
+                Doc::toggle(&button, Class::On, tab == pane);
+                let _ = button.set_attribute("aria-selected", if tab == pane { "true" } else { "false" });
+            }
+        });
+        if pane == Act::Trace {
+            self.render_trace();
+        }
+        if pane == Act::Why
+            && let Some(panel) = self.q(&Class::Capture.into())
+            && let (Some(stage), Some(line)) =
+                (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into()))
+        {
+            Links::draw(&stage, &line, true);
+        }
+    }
+
     fn act(self: &Rc<Self>, act: Act) {
         match act {
+            Act::Trace | Act::Why | Act::Source => self.show(act),
             Act::Step => leptos::task::spawn_local(self.clone().run(Mode::Step)),
             Act::Whnf => leptos::task::spawn_local(self.clone().run(Mode::Whnf)),
             Act::Nf => leptos::task::spawn_local(self.clone().run(Mode::Nf)),
@@ -1148,12 +1190,7 @@ impl Bench {
                 err.set_text_content(Some(&e.to_string()));
                 Doc::hide(&err, false);
             }
-            if let Some(details) = self
-                .q(&Class::Src.into())
-                .and_then(|e| e.dyn_into::<web_sys::HtmlDetailsElement>().ok())
-            {
-                details.set_open(true);
-            }
+            self.show(Act::Source);
         }
     }
 
@@ -1351,7 +1388,12 @@ pub fn Workbench() -> impl IntoView {
     };
     let cls = |cs: &[Class]| Attr::Class(cs.to_vec()).to_string();
     view! {
-        <div class=Class::Notes.to_string() node_ref=anchor></div>
+        <div class=Class::Program.to_string() node_ref=anchor>
+            <div class=Class::Notes.to_string()></div>
+            <div class=Class::Defs.to_string() hidden>
+                <div class=Class::DefsList.to_string()></div>
+            </div>
+        </div>
         <div class=Class::Rule.to_string() aria-live="polite"></div>
         <div class=Class::Scroll.to_string()>
             <div class=Class::Stage.to_string()>
@@ -1392,28 +1434,34 @@ pub fn Workbench() -> impl IntoView {
                 " de Bruijn"
             </label>
         </div>
-        <div class=Class::Capture.to_string() hidden>
-            <p>
-                <b>"Why α fired first."</b>
-                " Without renaming, substitution gives the term below. The dashed link is the argument’s free variable, caught by an inner binder, which changes what the term means."
-            </p>
-            <div class=Class::Scroll.to_string()>
-                <div class=cls(&[Class::Stage, Class::Small])>
-                    <svg class=Class::Arcs.to_string() aria-hidden="true"></svg>
-                    <div class=cls(&[Class::Line, Class::Tm])></div>
+        <div class=Class::Pane.to_string()>
+            <div class=Class::Tabs.to_string() role="tablist">
+                <button type="button" role="tab" class=cls(&[Class::Leaf, Class::On]) aria-selected="true" data-act=Act::Trace.to_string() on:click=act(Act::Trace)>
+                    "Trace"
+                </button>
+                <button type="button" role="tab" class=Class::Leaf.to_string() aria-selected="false" data-act=Act::Why.to_string() hidden on:click=act(Act::Why)>
+                    "Why α fired"
+                </button>
+                <button type="button" role="tab" class=Class::Leaf.to_string() aria-selected="false" data-act=Act::Source.to_string() on:click=act(Act::Source)>
+                    "Edit source"
+                </button>
+            </div>
+            <div class=Class::Trace.to_string() role="tabpanel">
+                <ol on:click=move |e| b5.pick(&e)></ol>
+            </div>
+            <div class=Class::Capture.to_string() role="tabpanel" hidden>
+                <p>
+                    <b>"Why α fired first."</b>
+                    " Without renaming, substitution gives the term below. The dashed link is the argument’s free variable, caught by an inner binder, which changes what the term means."
+                </p>
+                <div class=Class::Scroll.to_string()>
+                    <div class=cls(&[Class::Stage, Class::Small])>
+                        <svg class=Class::Arcs.to_string() aria-hidden="true"></svg>
+                        <div class=cls(&[Class::Line, Class::Tm])></div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class=Class::Defs.to_string() hidden>
-            <div class=Class::Label.to_string()>"Definitions " <span>"· δ unfolds these"</span></div>
-            <div class=Class::DefsList.to_string()></div>
-        </div>
-        <details class=Class::Trace.to_string() open>
-            <summary>"Trace"</summary>
-            <ol on:click=move |e| b5.pick(&e)></ol>
-        </details>
-        <details class=Class::Src.to_string()>
-            <summary>"Edit source"</summary>
+            <div class=Class::Src.to_string() role="tabpanel" hidden>
             <textarea spellcheck="false" rows="5" aria-label="Program source"></textarea>
             <div class=Class::SrcRow.to_string()>
                 <button type="button" class=cls(&[Class::Btn, Class::Primary]) data-act=Act::Load.to_string() on:click=move |_| b6.act(Act::Load)>
@@ -1426,6 +1474,7 @@ pub fn Workbench() -> impl IntoView {
                 </p>
             </div>
             <p class=Class::Err.to_string() hidden></p>
-        </details>
+            </div>
+        </div>
     }
 }

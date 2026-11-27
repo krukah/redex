@@ -53,14 +53,14 @@ for (const id of ids) {
     const before = (await marks()).filter(([n]) => n === 'moved').length;
     await page.click('[data-redex="workbench"] [data-act="step"]');
     await page.waitForFunction(n => performance.getEntriesByType('mark').filter(m => m.name === 'redex:moved').length > n, before, { timeout: 30000 });
-    await page.waitForFunction(() => !document.querySelector('[data-redex="workbench"] [data-act="back"]').disabled);
+    await page.waitForFunction(() => document.querySelector('[data-redex="workbench"]').getAttribute('aria-busy') === 'false');
   }
   print(`${id}: Step by Step`, table(await marks(), await kinds()));
   await page.click('[data-redex="workbench"] [data-act="reset"]');
   await page.evaluate(() => performance.clearMarks());
   await page.click('[data-redex="workbench"] [data-act="nf"]');
-  await page.waitForFunction(() => document.querySelector('[data-redex="workbench"] [data-act="nf"]').textContent === 'Stop');
-  await page.waitForFunction(() => document.querySelector('[data-redex="workbench"] [data-act="nf"]').textContent === 'Normalize', null, { timeout: 180000 });
+  await page.waitForFunction(() => document.querySelector('[data-redex="workbench"]').getAttribute('aria-busy') === 'true');
+  await page.waitForFunction(() => document.querySelector('[data-redex="workbench"]').getAttribute('aria-busy') === 'false', null, { timeout: 180000 });
   print(`${id}: Normalize`, table(await marks(), await kinds()));
 }
 if (errors.length) console.log('page errors:', errors);
