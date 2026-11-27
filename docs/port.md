@@ -62,15 +62,9 @@ Decisions
 - `term::Number` prints numbers as JavaScript does (`String(x)`, `toFixed`), for error copy now and
   SVG coordinates later; tested against node's output.
 
-JS behaviour ported as-is (looks like a bug)
-
-- `def toString := …` (or any `Object.prototype` member name) is rejected as "built in", because
-  the JS checks `ALIAS[name]` on a plain object. Covered by the error fixtures.
-- A `\r` before a line's end defeats the `def` and `--` regexes (`.` does not match it), so with
-  CRLF sources notes and definitions fall into the body. Ported, fixture-covered.
-- The tokenizer walks UTF-16 code units, so an astral character is reported as half a surrogate
-  pair in "Unexpected character". Rust reports the whole character. Not reproducible in a Rust
-  `String`; the only gap, and only in an error message.
+JS behaviour ported as-is at first, all since fixed in both engines (see "Bugs fixed" below):
+`Object.prototype` names as definitions, CRLF sources, and astral characters in the tokenizer's
+error.
 
 Size: unchanged (engine not linked into the page yet).
 
@@ -184,8 +178,8 @@ Screenshots, pixel-compared in the same headless Chrome: 32 of 56 identical. The
 Decisions
 
 - Component names avoid the engine's types: `Deck` (rules), `Paths` (graph), `Lanes` (race).
-- The graph opens a term with `document.querySelector('[data-redex="workbench"]')`, as the JS
-  does, although it reaches outside the widget's root. Ported as-is.
+- The graph opened a term with `document.querySelector('[data-redex="workbench"]')`, as the JS
+  did, reaching outside the widget's root. Since fixed in both (see "Bugs fixed").
 - A widget whose markup must exist before the first `load` event (the deck, the race's initial
   lanes) renders it through `inner_html` in `view!`, so it is in the DOM when `mount_to` returns.
 
@@ -245,3 +239,78 @@ from one source, and each adds a case that fails before the fix and passes after
    graph emits it and each workbench scrolls its own root. `scripts/reveal.mjs` mounts two groups
    on one page and opens a term from the second group's graph: before the fix both engines left
    the second workbench 3867 px down; after, it sits at the top, in the JS and the Rust.
+
+## 6b. Typed markup, newtypes, house style — done
+
+What changed
+
+- **`markup`** (new crate, pure): `Node` (element, text, list) built by composition; `Tag`; the
+  closed `Class` enum (every class the widgets write, `Blank` for the empty slot the JS templates
+  left in `class="rdx-tile "` and `class=" fut"`); typed `Attr` (`Path`, `Uid`, `Anchor`, `Kind`,
+  `Id`, `Step`, `Example`, `Race`, `Option<Strategy>`, `Name`, `Act`, `Style`, `Num`, `Trace`,
+  `Plate`, …); `Data` for `data-*` names; `Num` (a number with its JS formatting); `Seg`/`Trace`
+  (SVG path data); `Query` (CSS selectors from the same pieces); `Hue`, `Anchor`, `Plate`, `Act`,
+  `Opt`. `Node`'s `Display` is the only string output and the only escaping.
+- **`units`** (new crate, the bottom): `Px`, `Ms`, and `Number` (moved out of `term`).
+- **Layout returns geometry**: `Plot` gives `Spot`s in `Px` and a `Trace` per edge; `Thumb` gives
+  `Node`s.
+- **Widgets build real DOM** from `Node`s (`Doc::fill`: `createElement` / `createElementNS` in
+  the SVG namespace, attributes in writing order, text nodes). No `inner_html` remains anywhere.
+  Building elements does not disturb the motion approach: a swap is still synchronous, ghosts are
+  still `cloneNode` copies of live elements, and measuring after a swap reads the new layout
+  exactly as before. The deck and the race, which need markup in place before the first `load`
+  event, fill on that event (and on mount as a fallback) instead of through `inner_html=`.
+- **Reads back are typed**: `Doc::read::<T>(el, Data::X)` parses into `Path`, `Uid`, `Kind`,
+  `Anchor`, `Id`, `Step`, `Act`, `Example`, `Race`, `Strategy`; every query is a `Query` built
+  from `Class`, `Tag` and `Data`; inline styles go through `motion::Prop`.
+- **Newtypes** (engine): `Name`, `Prim`, `Field`, `Key`, `Size`, `Nat` (term); `Source`, `Note`,
+  `Failure` (syntax); `Glyph`, `Var`, `Slot`, `Part` (rules); `Cap`, `Step` (strategy); `Id`,
+  `Depth` (explore); `Px`, `Ms` (units); `Prop`, `Ease`, `Clock` as speed (motion); `Level`,
+  `Widget`, `Letter` (widgets). Engine `Node` is now private to `term`.
+- **House style**: House Lint `--all` reports nothing for every rule, including the four you ask
+  for by name (`forwarding-closure`, `type-hint`, `inline-bound`, `field-access`); the vendored
+  linter passes its own rules too. Every struct reads and writes its fields through one-line
+  accessors. Every import is a glob (`markup::Selector` became `Query` to stop colliding with the
+  Leptos prelude; the widgets name `term::Env` in full for the same reason). Single-use bindings
+  are inlined or split into small methods; the ones left are reused, ordered on purpose (uid
+  allocation, a token read before the cursor moves, a borrow released before listeners run) or
+  cloned into a `move` closure. No blank lines inside bodies, no inline bounds, no pub fields.
+
+Standing counts (`--all`, every rule, outside the vendored linter)
+
+| Rule | Before 6b | After |
+|---|---|---|
+| gating rules (all 16) | 0 | 0 |
+| `forwarding-closure` | 14 (13 + 1 in the linter) | 0 |
+| `type-hint` | 0 | 0 |
+| `inline-bound` | 0 | 0 |
+| `field-access` | 348 | 0 |
+
+The one `lint:allow` left is on `redex::mount_all`: a module-level wasm-bindgen export must be a
+bare `fn`. Designing it away means `Redex.mountAll()` on the host page instead of `mountAll()`.
+
+Strings that remain, and why
+
+- Prose: stats, verdict and route note (`set_text_content`), status, trace notes, error copy,
+  numbers in sentences (`format!`). These are user copy, not markup.
+- `Node::text` content and the static skeletons in `view!` (`"Step"`, `"Trace"`, …).
+- Program text (`Source`) and the parser's slices of it; `Line` works on raw source lines.
+- Identifiers on the wire: `Example::id`, `Race::id`, `Strategy::id`, `Kind`'s name; parsed back
+  through `FromStr`.
+- Ghost `cssText` (one `format!` of `Px` values and the inherited computed styles), and the
+  `px` suffix on inline lengths.
+- The fixture dump format (`Term::dump`) and the JSON fixtures in tests.
+
+Parity
+
+- `fixtures/engine` blocks HTML, thumbnails and every graph coordinate still match byte for byte
+  (the typed renderer reproduces attribute order, `/>` on empty SVG elements, and `String(x)` /
+  `toFixed(1)`).
+- `scripts/parity.mjs`, all 28 states × 2: identical canonical DOM in every widget and every
+  ghost, with one timing race: at 800 ms into a firing with motion on, the redex's husk can be
+  caught at the very end of its 341 ms fade in one engine and gone in the other (it matched in
+  two of three reruns).
+- `scripts/golden.mjs` and `scripts/golden-dom.mjs` reproduce the committed fixtures.
+
+Size: 170.3 KB gzipped (page), up from 155.2 KB: building DOM node by node pulls in more of
+web-sys than `innerHTML` did.

@@ -11,6 +11,7 @@ until cutover; `docs/plan.md` is the port plan and `docs/port.md` its ledger.
 
 | Path | Covers |
 |---|---|
+| `crates/units/AGENTS.md` | `Px`, `Ms`, and numbers printed as JavaScript prints them |
 | `crates/term/AGENTS.md` | Term nodes, uids and provenance, paths, names, α-keys, Env, the global constant set |
 | `crates/subst/AGENTS.md` | Capture-avoiding substitution, `prepare` (renaming), the naive capturing variant |
 | `crates/syntax/AGENTS.md` | Tokenizer, parser, `Program` (defs and `--` notes), text printer |
@@ -19,6 +20,7 @@ until cutover; `docs/plan.md` is the port plan and `docs/port.md` its ledger.
 | `crates/explore/AGENTS.md` | The reduction graph: exploration to a cap, edges by rule, cycle detection |
 | `crates/layout/AGENTS.md` | Pure geometry: graph rows, columns, edge routes; thumbnails |
 | `crates/examples/AGENTS.md` | Example and race programs as data |
+| `crates/markup/AGENTS.md` | The typed HTML/SVG tree, classes, attributes, selectors, and its one escaping renderer |
 | `crates/motion/AGENTS.md` | Motion algebra on WAAPI: primitives, compositions, ghosts, timing |
 | `crates/widgets/AGENTS.md` | Leptos widgets and the shared `Session` |
 | `crates/redex/AGENTS.md` | `mount_all`, the embedding facade |
@@ -26,22 +28,24 @@ until cutover; `docs/plan.md` is the port plan and `docs/port.md` its ledger.
 
 ```mermaid
 flowchart LR
-  term --> subst --> rules --> strategy --> layout
-  rules --> explore --> layout
+  units --> term --> subst --> rules --> strategy --> explore
   term --> syntax --> examples
-  layout & examples & motion --> widgets --> redex --> page
+  explore & examples --> markup --> layout
+  markup --> motion
+  layout & motion --> widgets --> redex --> page
 ```
 
 ## Rules
 
-- The engine crates (`term` … `examples`) stay free of the DOM: no `web-sys`, no `leptos`. They are
-  covered by `cargo test`, and the golden fixtures in `fixtures/engine` (written by
+- The engine crates (`units` … `examples`), `markup` and `layout` stay free of the DOM: no
+  `web-sys`, no `leptos`. They are covered by `cargo test`, and the golden fixtures in `fixtures/engine` (written by
   `node scripts/golden.mjs` from the JS engine) are the spec they must match exactly.
 - A widget queries only inside its own root and talks to others only through the `Session`
   context. No element ids, no module-level DOM state: a host page may hold several widgets.
-- Every class in widget markup is prefixed (`rdx-` for structure, `r…` for term tokens) and every
-  selector in `redex.css` starts with `.redex`. Host pages run their own CSS (Jekyll prose, rouge's
-  `.n`/`.c`/`.k` highlighting), so unprefixed names collide.
+- Markup is a `markup::Node`, never a string: classes come from the closed `markup::Class` enum
+  (`rdx-` for structure, short tokens for the term), attributes are typed, and the renderer is
+  the one place that escapes. Every selector in `redex.css` starts with `.redex`: host pages run
+  their own CSS (Jekyll prose, rouge's `.n`/`.c`/`.k` highlighting), so unscoped names collide.
 - Colors and fonts come only from `--rdx-*` tokens, declared under `:where(:root)` so any host rule
   overrides them. No literal colors in widget rules.
 - Visual direction: the Lean documentation, not an app. Black on white, Lean blue (`#0073a3`), thin
@@ -56,8 +60,10 @@ flowchart LR
   `Element::animate` or adds a CSS keyframe for movement or opacity; CSS keyframes are for color
   afterglows only.
 - Motion is direct and calm: things travel in straight lines, appear and disappear by fading in
-  place, and a firing's parts share one `BEAT` and the `EASE` curves.
+  place, and a firing's parts share one `BEAT` and the `Ease` curves.
 - Keep the three color channels apart: rule ink, binder hue, highlighter.
+- Domain values cross function boundaries as their types (`Name`, `Path`, `Uid`, `Px`, `Ms`,
+  `Step`, `Cap`, `Depth`, `Kind`, …), never as bare strings or numbers.
 - `Motion::enabled()` gates every animation (the primitives check it), the CSS honors
   `prefers-reduced-motion`, and every primitive resolves on a timer even if its animation stalls.
 - Examples are self-contained: each carries the `def`s it uses.
@@ -70,6 +76,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 trunk build --release                                         # the page, into dist/
 cargo run --manifest-path crates/lints/Cargo.toml -- --base master
+cargo run --manifest-path crates/lints/Cargo.toml -- --all   # and --only each opt-in rule
 trunk serve                                                   # http://localhost:8001
 ```
 
