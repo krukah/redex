@@ -14,45 +14,48 @@ pub struct Tiles;
 
 impl Tiles {
     pub fn node() -> Node {
-        let rules = Example::RULES.iter().map(|r| {
-            let k = r.kind().expect("a rule example names its rule");
-            Self::tile(
-                *r,
-                Class::Ink(k),
-                r.sub().unwrap_or_default(),
-                Node::el(Tag::Span)
-                    .class([Class::Face])
-                    .attr(Attr::Hidden)
-                    .kid(Node::text(k.glyph())),
-                r.label(),
-                vec![
-                    Node::el(Tag::Span)
-                        .class([Class::Sub])
-                        .kid(Node::text(r.sub().unwrap_or_default())),
-                    Node::el(Tag::Code).kid(Node::text(r.schema().unwrap_or_default())),
-                ],
-            )
-        });
-        let more = Example::MORE.iter().map(|m| {
-            let p = Program::parse(&m.src()).expect("examples parse");
-            let t = Thumb::new(p.term(), p.env(), m.eta());
-            let caption = p.notes().first().map(ToString::to_string).unwrap_or_default();
-            Self::tile(
-                *m,
-                Class::Blank,
-                &caption,
-                t.svg().clone(),
-                m.label(),
-                vec![Node::el(Tag::Span).class([Class::Sub]).kid(t.fate().clone())],
-            )
-        });
         let label = |s: &str| Node::el(Tag::Div).class([Class::Label]).kid(Node::text(s));
         Node::el(Tag::Div)
             .class([Class::Deck])
             .kid(label("Rules"))
-            .kids(rules)
+            .kids(Example::RULES.iter().map(|r| Self::rule(*r)))
             .kid(label("More examples"))
-            .kids(more)
+            .kids(Example::MORE.iter().map(|m| Self::example(*m)))
+    }
+
+    /// A rule's tile: its letter, its name, what it does and its schema.
+    fn rule(r: Example) -> Node {
+        let k = r.kind().expect("a rule example names its rule");
+        Self::tile(
+            r,
+            Class::Ink(k),
+            r.sub().unwrap_or_default(),
+            Node::el(Tag::Span)
+                .class([Class::Face])
+                .attr(Attr::Hidden)
+                .kid(Node::text(k.glyph())),
+            r.label(),
+            vec![
+                Node::el(Tag::Span)
+                    .class([Class::Sub])
+                    .kid(Node::text(r.sub().unwrap_or_default())),
+                Node::el(Tag::Code).kid(Node::text(r.schema().unwrap_or_default())),
+            ],
+        )
+    }
+
+    /// An example's tile: a thumbnail of its graph, its label, and how it ends.
+    fn example(m: Example) -> Node {
+        let p = Program::parse(&m.src()).expect("examples parse");
+        let t = Thumb::new(p.term(), p.env(), m.eta());
+        Self::tile(
+            m,
+            Class::Blank,
+            &p.notes().first().map(ToString::to_string).unwrap_or_default(),
+            t.svg().clone(),
+            m.label(),
+            vec![Node::el(Tag::Span).class([Class::Sub]).kid(t.fate().clone())],
+        )
     }
 
     fn tile(ex: Example, ink: Class, title: &str, face: Node, name: &str, details: Vec<Node>) -> Node {
@@ -87,17 +90,17 @@ pub fn Deck() -> impl IntoView {
         if e != Event::Load {
             return;
         }
-        let ex = shown.example();
         Doc::all(&wrap, &Query::Has(Data::Ex)).iter().for_each(|el| {
-            let on = Doc::read::<Example>(el, Data::Ex) == ex;
+            let on = Doc::read::<Example>(el, Data::Ex) == shown.example();
             Doc::toggle(el, Class::On, on);
             Doc::put(el, &Attr::Pressed(on));
         });
     });
     wrap.on_load(|el| Tiles::fill(&el));
     let click = move |e: web_sys::MouseEvent| {
-        let hit = Doc::target(&e).and_then(|t| Doc::closest(&t, &Query::Has(Data::Ex)));
-        if let Some(ex) = hit.and_then(|h| Doc::read::<Example>(&h, Data::Ex))
+        if let Some(ex) = Doc::target(&e)
+            .and_then(|t| Doc::closest(&t, &Query::Has(Data::Ex)))
+            .and_then(|h| Doc::read::<Example>(&h, Data::Ex))
             && !session.busy()
         {
             session.load_example(ex);

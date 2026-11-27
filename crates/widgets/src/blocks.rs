@@ -124,10 +124,9 @@ impl<'a> Blocks<'a> {
             }
             (None, Shape::Pair(a, b)) => {
                 draft.classes_mut().push(Class::Pair);
-                let first = self.draw(a, &p.child('a'), ctx, d.inner(), false, last);
                 (
                     Node::list([
-                        first,
+                        self.draw(a, &p.child('a'), ctx, d.inner(), false, last),
                         Node::el(Tag::Span).class([Class::Comma]).kid(Node::text(",")),
                         self.draw(b, &p.child('b'), ctx, d.inner(), false, last),
                     ]),
@@ -159,15 +158,17 @@ impl<'a> Blocks<'a> {
                 .flatten(),
         );
         classes.extend(t.cap().then_some(Class::Cap));
-        let badge = kind.map(|k| {
-            Node::el(Tag::Button)
-                .attr(Attr::Button)
-                .class([Class::Badge, Class::Ink(k)])
-                .attr(Attr::Label(format!("Fire {k}")))
-                .kid(Node::text(k.glyph()))
-        });
-        let el = Node::el(Tag::Span).class(classes);
-        attrs.into_iter().fold(el, Node::attr).kids(badge).kid(inner)
+        attrs
+            .into_iter()
+            .fold(Node::el(Tag::Span).class(classes), Node::attr)
+            .kids(kind.map(|k| {
+                Node::el(Tag::Button)
+                    .attr(Attr::Button)
+                    .class([Class::Badge, Class::Ink(k)])
+                    .attr(Attr::Label(format!("Fire {k}")))
+                    .kid(Node::text(k.glyph()))
+            }))
+            .kid(inner)
     }
 
     fn var(&self, n: &Name, ctx: &[Scope], draft: &mut Draft) -> Node {
@@ -197,16 +198,15 @@ impl<'a> Blocks<'a> {
             Class::Hue(hue),
         ]);
         draft.attrs_mut().push(Attr::Binder(anchor));
-        let flashed = if t.mark() == Some(Mark::Binder) {
-            vec![Class::Flash, Class::Flashed(Mark::Renamed)]
-        } else {
-            vec![]
-        };
         let name = match (self.db(), self.live()) {
             (true, _) => Node::none(),
             (false, true) => Node::el(Tag::Button)
                 .attr(Attr::Button)
-                .class([Class::Binder].into_iter().chain(flashed))
+                .class([Class::Binder].into_iter().chain(if t.mark() == Some(Mark::Binder) {
+                    vec![Class::Flash, Class::Flashed(Mark::Renamed)]
+                } else {
+                    vec![]
+                }))
                 .attr(Attr::Path(p.clone()))
                 .attr(Attr::Anchor(anchor))
                 .attr(Attr::Title("Rename (α)".to_string()))
@@ -217,8 +217,12 @@ impl<'a> Blocks<'a> {
                 .kid(Node::text(&x)),
         };
         let kw = |s: &str| {
-            let k = Node::el(Tag::Span).class([Class::Keyword]);
-            (if self.db() { k.attr(Attr::Anchor(anchor)) } else { k }).kid(Node::text(s))
+            if self.db() {
+                Node::el(Tag::Span).class([Class::Keyword]).attr(Attr::Anchor(anchor))
+            } else {
+                Node::el(Tag::Span).class([Class::Keyword])
+            }
+            .kid(Node::text(s))
         };
         let inside = ctx
             .iter()
@@ -227,16 +231,13 @@ impl<'a> Blocks<'a> {
             .collect::<Vec<Scope>>();
         let tab = Node::el(Tag::Span).class([Class::Tab]);
         match t.shape() {
-            Shape::Let(_, v, b) => {
-                let value = self.draw(v, &p.child('v'), ctx, d.inner(), false, last);
-                Node::list([
-                    tab.kid(kw("let"))
-                        .kid(name)
-                        .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
-                        .kid(value),
-                    self.draw(b, &p.child('b'), &inside, d.inner(), false, last),
-                ])
-            }
+            Shape::Let(_, v, b) => Node::list([
+                tab.kid(kw("let"))
+                    .kid(name)
+                    .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
+                    .kid(self.draw(v, &p.child('v'), ctx, d.inner(), false, last)),
+                self.draw(b, &p.child('b'), &inside, d.inner(), false, last),
+            ]),
             Shape::Lam(_, b) => Node::list([
                 tab.kid(kw("λ")).kid(name),
                 self.draw(b, &p.child('b'), &inside, d.inner(), false, last),

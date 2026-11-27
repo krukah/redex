@@ -27,10 +27,9 @@ impl Doc {
     /// The parent element of a node a view holds a reference to.
     pub fn above<E>(el: Option<E>) -> Option<Element>
     where
-        E: Into<web_sys::Node>,
+        E: AsRef<web_sys::Node>,
     {
-        let node = el?.into();
-        node.parent_element()
+        el?.as_ref().parent_element()
     }
 
     pub fn closest(el: &Element, sel: &Query) -> Option<Element> {
@@ -113,12 +112,13 @@ impl Doc {
             Node::Text(s) => vec![doc.create_text_node(s).into()],
             Node::List(nodes) => nodes.iter().flat_map(|n| Self::build(doc, n)).collect(),
             Node::El(tag, attrs, kids) => {
-                let made = if tag.svg() {
+                let Ok(el) = (if tag.svg() {
                     doc.create_element_ns(Some(Tag::SVG), tag.name())
                 } else {
                     doc.create_element(tag.name())
+                }) else {
+                    return vec![];
                 };
-                let Ok(el) = made else { return vec![] };
                 attrs.iter().for_each(|a| {
                     let _ = el.set_attribute(a.name(), &a.to_string());
                 });

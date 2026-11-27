@@ -94,14 +94,25 @@ impl Piece {
         self.ghost.as_ref()
     }
 
+    /// What the rule card shows for the piece: a binder's name, or the bound term's text.
+    fn shown(&self) -> String {
+        if self.binder().is_some() {
+            self.el().text_content().unwrap_or_default()
+        } else {
+            self.text().cloned().unwrap_or_default()
+        }
+    }
+
     /// A piece of the term moves; a binder's tab and a definition's body stay where they are.
     fn travels(&self) -> bool {
         self.uid().is_some() && !self.external()
     }
 
     fn measured(self) -> Self {
-        let rect = Some(self.el().get_bounding_client_rect());
-        Self { rect, ..self }
+        Self {
+            rect: Some(self.el().get_bounding_client_rect()),
+            ..self
+        }
     }
 
     fn haunted(self, ghost: Option<Element>) -> Self {
@@ -166,33 +177,39 @@ impl Links {
         }
         let base = stage.get_bounding_client_rect();
         let ceiling = Px::new(line.get_bounding_client_rect().top() - base.top() - 30.0);
-        let arcs = Doc::all(line, &Query::Has(Data::Bid)).into_iter().filter_map(|v| {
-            let id = Doc::read::<Anchor>(&v, Data::Bid)?;
-            let anchor = Doc::q(line, &Query::is(Data::Anchor, &id))?;
-            let (a, b) = (anchor.get_bounding_client_rect(), v.get_bounding_client_rect());
-            let (x1, x2) =
-                (Px::new(a.left() + a.width() / 2.0 - base.left()), Px::new(b.left() + b.width() / 2.0 - base.left()));
-            let (y1, y2) = (Px::new(a.top() - base.top() + 2.0), Px::new(b.top() - base.top() + 2.0));
-            let apex = ceiling.max(y1.min(y2) - Px::new(10.0) - (x2 - x1).abs() * 0.12);
-            let cap = Doc::has(&v, Class::Cap).then_some(Class::Cap);
-            let f = Num::Tenths;
-            Some(Node::list([
-                Node::el(Tag::Path)
-                    .class([Class::Arc].into_iter().chain(cap))
-                    .attr(Attr::Arc(id))
-                    .attr(Attr::D(Trace::spaced(vec![
-                        Seg::Move(f(x1), f(y1)),
-                        Seg::Cubic(f(x1), f(apex), f(x2), f(apex), f(x2), f(y2)),
-                    ]))),
-                Node::el(Tag::Circle)
-                    .class([Class::ArcEnd].into_iter().chain(cap))
-                    .attr(Attr::Arc(id))
-                    .attr(Attr::Cx(f(x2)))
-                    .attr(Attr::Cy(f(y2)))
-                    .attr(Attr::R(Num::Js(Px::new(2.2)))),
-            ]))
-        });
-        Doc::fill(&svg, &Node::list(arcs));
+        Doc::fill(
+            &svg,
+            &Node::list(Doc::all(line, &Query::Has(Data::Bid)).into_iter().filter_map(|v| {
+                let id = Doc::read::<Anchor>(&v, Data::Bid)?;
+                let (a, b) = (
+                    Doc::q(line, &Query::is(Data::Anchor, &id))?.get_bounding_client_rect(),
+                    v.get_bounding_client_rect(),
+                );
+                let (x1, x2) = (
+                    Px::new(a.left() + a.width() / 2.0 - base.left()),
+                    Px::new(b.left() + b.width() / 2.0 - base.left()),
+                );
+                let (y1, y2) = (Px::new(a.top() - base.top() + 2.0), Px::new(b.top() - base.top() + 2.0));
+                let apex = ceiling.max(y1.min(y2) - Px::new(10.0) - (x2 - x1).abs() * 0.12);
+                let cap = Doc::has(&v, Class::Cap).then_some(Class::Cap);
+                let f = Num::Tenths;
+                Some(Node::list([
+                    Node::el(Tag::Path)
+                        .class([Class::Arc].into_iter().chain(cap))
+                        .attr(Attr::Arc(id))
+                        .attr(Attr::D(Trace::spaced(vec![
+                            Seg::Move(f(x1), f(y1)),
+                            Seg::Cubic(f(x1), f(apex), f(x2), f(apex), f(x2), f(y2)),
+                        ]))),
+                    Node::el(Tag::Circle)
+                        .class([Class::ArcEnd].into_iter().chain(cap))
+                        .attr(Attr::Arc(id))
+                        .attr(Attr::Cx(f(x2)))
+                        .attr(Attr::Cy(f(y2)))
+                        .attr(Attr::R(Num::Js(Px::new(2.2)))),
+                ]))
+            })),
+        );
     }
 }
 
@@ -365,22 +382,24 @@ impl Bench {
             Doc::hide(&defs, env.is_empty());
         }
         if let Some(list) = self.q(&Class::DefsList.into()) {
-            let defs = env.iter().map(|(n, b)| {
-                Node::el(Tag::Div)
-                    .class([Class::DefRow, Class::Tm])
-                    .kid(
-                        Node::el(Tag::Span)
-                            .class([Class::Block, Class::Const, Class::Def])
-                            .kid(Node::text(n)),
-                    )
-                    .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
-                    .kid(
-                        Node::el(Tag::Span)
-                            .attr(Attr::Def(n.clone()))
-                            .kid(Blocks::new(&env, false, false).node(b)),
-                    )
-            });
-            Doc::fill(&list, &Node::list(defs));
+            Doc::fill(
+                &list,
+                &Node::list(env.iter().map(|(n, b)| {
+                    Node::el(Tag::Div)
+                        .class([Class::DefRow, Class::Tm])
+                        .kid(
+                            Node::el(Tag::Span)
+                                .class([Class::Block, Class::Const, Class::Def])
+                                .kid(Node::text(n)),
+                        )
+                        .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
+                        .kid(
+                            Node::el(Tag::Span)
+                                .attr(Attr::Def(n.clone()))
+                                .kid(Blocks::new(&env, false, false).node(b)),
+                        )
+                })),
+            );
         }
         if let Some(src) = self.source() {
             src.set_value(self.session().src().as_str());
@@ -393,8 +412,30 @@ impl Bench {
     fn render_status(&self) {
         let (t, env) = (self.session().term(), self.session().env());
         let rs = t.redexes(&env);
-        let main = rs.iter().filter(|r| !r.kind().is_eta()).count();
-        let head = match (main, Strategy::Whnf.next(&t, &env)) {
+        let (idx, last) = (self.session().idx(), self.session().last());
+        if let Some(status) = self.q(&Class::Status.into()) {
+            Doc::fill(
+                &status,
+                &Node::list([Self::verdict(&t, &env, &rs)])
+                    .kids(Self::tallies(&rs))
+                    .kid(Node::el(Tag::Span).class([Class::Stepno]).kid(Node::text(format!(
+                        "step {idx}{} · size {}",
+                        if last > idx { format!(" of {last}") } else { String::new() },
+                        t.size()
+                    ))))
+                    .kids(
+                        self.note()
+                            .borrow()
+                            .clone()
+                            .map(|n| Node::el(Tag::Span).class([Class::Note]).kid(Node::text(n))),
+                    ),
+            );
+        }
+    }
+
+    /// Normal form, weak head normal form, or how many redexes are left.
+    fn verdict(t: &Term, env: &term::Env, rs: &[Redex]) -> Node {
+        match (rs.iter().filter(|r| !r.kind().is_eta()).count(), Strategy::Whnf.next(t, env)) {
             (0, _) => Node::el(Tag::B)
                 .class([Class::NfLabel])
                 .kid(Node::text("Normal form"))
@@ -408,7 +449,11 @@ impl Bench {
             _ => {
                 Node::el(Tag::B).kid(Node::text(format!("{} redex{}", rs.len(), if rs.len() > 1 { "es" } else { "" })))
             }
-        };
+        }
+    }
+
+    /// One letter per rule with redexes in the term, and how many, in order of first appearance.
+    fn tallies(rs: &[Redex]) -> Option<Node> {
         let tally = rs.iter().fold(Vec::<(Kind, usize)>::new(), |mut tally, r| {
             match tally.iter_mut().find(|(k, _)| *k == r.kind()) {
                 Some(slot) => slot.1 += 1,
@@ -416,7 +461,7 @@ impl Bench {
             }
             tally
         });
-        let marks = (!tally.is_empty()).then(|| {
+        (!tally.is_empty()).then(|| {
             Node::el(Tag::Span)
                 .class([Class::Tallies])
                 .kids(tally.iter().map(|(k, n)| {
@@ -425,24 +470,7 @@ impl Bench {
                         .kid(Letter::flat(Some(*k)))
                         .kids((*n > 1).then(|| Node::text(format!("×{n}"))))
                 }))
-        });
-        let (idx, last) = (self.session().idx(), self.session().last());
-        let stepno =
-            format!("step {idx}{} · size {}", if last > idx { format!(" of {last}") } else { String::new() }, t.size());
-        let note = self
-            .note()
-            .borrow()
-            .clone()
-            .map(|n| Node::el(Tag::Span).class([Class::Note]).kid(Node::text(n)));
-        if let Some(status) = self.q(&Class::Status.into()) {
-            Doc::fill(
-                &status,
-                &Node::list([head])
-                    .kids(marks)
-                    .kid(Node::el(Tag::Span).class([Class::Stepno]).kid(Node::text(stepno)))
-                    .kids(note),
-            );
-        }
+        })
     }
 
     fn render_trace(&self) {
@@ -453,23 +481,16 @@ impl Bench {
             return;
         };
         let idx = self.session().idx();
-        let rows = self.session().history().into_iter().enumerate().map(|(i, h)| {
-            let i = Step::new(i);
-            let place = match i.cmp(&idx) {
-                std::cmp::Ordering::Equal => vec![Class::Cur],
-                std::cmp::Ordering::Greater => vec![Class::Blank, Class::Fut],
-                std::cmp::Ordering::Less => vec![Class::Blank],
-            };
-            let button = Node::el(Tag::Button)
-                .attr(Attr::Button)
-                .attr(Attr::I(i))
-                .kid(Node::el(Tag::Span).class([Class::Ti]).kid(Node::text(i)))
-                .kid(Letter::flat(h.kind()))
-                .kid(Node::el(Tag::Code).kid(Node::text(h.term().text())))
-                .kids(h.note().map(|n| Node::el(Tag::Small).kid(Node::text(n))));
-            Node::el(Tag::Li).class(place).kid(button)
-        });
-        Doc::fill(&ol, &Node::list(rows));
+        Doc::fill(
+            &ol,
+            &Node::list(
+                self.session()
+                    .history()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, h)| Self::row(Step::new(i), h, idx)),
+            ),
+        );
         let Some(li) = ol
             .children()
             .item(idx.get() as u32)
@@ -483,6 +504,25 @@ impl Bench {
         } else if bot > ol.scroll_top() + ol.client_height() {
             ol.set_scroll_top(bot - ol.client_height() + 4);
         }
+    }
+
+    /// One line of the trace: where it sits relative to the cursor, its rule, its term, its note.
+    fn row(i: Step, h: &Entry, idx: Step) -> Node {
+        Node::el(Tag::Li)
+            .class(match i.cmp(&idx) {
+                std::cmp::Ordering::Equal => vec![Class::Cur],
+                std::cmp::Ordering::Greater => vec![Class::Blank, Class::Fut],
+                std::cmp::Ordering::Less => vec![Class::Blank],
+            })
+            .kid(
+                Node::el(Tag::Button)
+                    .attr(Attr::Button)
+                    .attr(Attr::I(i))
+                    .kid(Node::el(Tag::Span).class([Class::Ti]).kid(Node::text(i)))
+                    .kid(Letter::flat(h.kind()))
+                    .kid(Node::el(Tag::Code).kid(Node::text(h.term().text())))
+                    .kids(h.note().map(|n| Node::el(Tag::Small).kid(Node::text(n)))),
+            )
     }
 
     fn render_capture(&self) {
@@ -527,8 +567,12 @@ impl Bench {
     }
 
     fn matched(&self, path: &Path, kind: Kind) -> Match {
-        let t = self.session().term();
-        let redex = t.at(path).cloned().expect("a redex inside the term");
+        let redex = self
+            .session()
+            .term()
+            .at(path)
+            .cloned()
+            .expect("a redex inside the term");
         let schema = kind.schema(&redex);
         let mut pieces = kind
             .bindings(&redex)
@@ -537,12 +581,11 @@ impl Bench {
                 let owner = self.node(&path.join(b.rel()))?;
                 let piece = Piece::new(b.var(), schema.slot(b.var()), owner.clone());
                 if b.is_binder() {
-                    let tab = Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Binder.into()))
-                        .or_else(|| {
-                            Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Keyword.into()))
-                        })?;
                     Some(Piece {
-                        el: tab,
+                        el: Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Binder.into()))
+                            .or_else(|| {
+                                Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Keyword.into()))
+                            })?,
                         binder: Doc::read(&owner, Data::Binder),
                         ..piece
                     })
@@ -612,26 +655,6 @@ impl Bench {
         };
         let mv =
             |slot: Option<Slot>| Node::el(Tag::Span).class([Class::Moving].into_iter().chain(slot.map(Class::Slot)));
-        let schema = m.schema().parts().into_iter().map(|p| match p {
-            Part::Var(v) => mv(m.schema().slot(v)).kid(Node::text(v)),
-            Part::Text(s) => Node::text(s),
-        });
-        let binds = m
-            .pieces()
-            .iter()
-            .filter(|pc| pc.slot().is_some() && !pc.external())
-            .map(|pc| {
-                let shown = if pc.binder().is_some() {
-                    pc.el().text_content().unwrap_or_default()
-                } else {
-                    pc.text().cloned().unwrap_or_default()
-                };
-                Node::el(Tag::Span)
-                    .class([Class::Bind])
-                    .kid(mv(pc.slot()).kid(Node::text(pc.var())))
-                    .kid(Node::text(" = "))
-                    .kid(Node::el(Tag::Code).kid(Node::text(Self::short(&shown))))
-            });
         Doc::fill(
             &card,
             &Node::list([
@@ -639,8 +662,22 @@ impl Bench {
                     .class([Class::Schema])
                     .kid(Letter::flat(Some(kind)))
                     .kid(Node::el(Tag::B).kid(Node::text(Self::rule(kind))))
-                    .kid(Node::el(Tag::Code).kids(schema)),
-                Node::el(Tag::P).class([Class::Binds]).kids(binds),
+                    .kid(Node::el(Tag::Code).kids(m.schema().parts().into_iter().map(|p| match p {
+                        Part::Var(v) => mv(m.schema().slot(v)).kid(Node::text(v)),
+                        Part::Text(s) => Node::text(s),
+                    }))),
+                Node::el(Tag::P).class([Class::Binds]).kids(
+                    m.pieces()
+                        .iter()
+                        .filter(|pc| pc.slot().is_some() && !pc.external())
+                        .map(|pc| {
+                            Node::el(Tag::Span)
+                                .class([Class::Bind])
+                                .kid(mv(pc.slot()).kid(Node::text(pc.var())))
+                                .kid(Node::text(" = "))
+                                .kid(Node::el(Tag::Code).kid(Node::text(Self::short(&pc.shown()))))
+                        }),
+                ),
             ]),
         );
     }
@@ -673,25 +710,26 @@ impl Bench {
             .iter()
             .for_each(|e| Doc::remove(e, &[Class::Lighted]));
         if let Some(id) = id {
-            let sel = Query::is(Data::Id, &id)
-                .or(Query::is(Data::Bid, &id))
-                .or(Query::from(Class::Binder).and(Query::is(Data::Anchor, &id)));
-            Doc::all(&stage, &sel)
-                .iter()
-                .for_each(|e| Doc::add(e, &[Class::Lighted]));
+            Doc::all(
+                &stage,
+                &Query::is(Data::Id, &id)
+                    .or(Query::is(Data::Bid, &id))
+                    .or(Query::from(Class::Binder).and(Query::is(Data::Anchor, &id))),
+            )
+            .iter()
+            .for_each(|e| Doc::add(e, &[Class::Lighted]));
         }
     }
 
     /// Before the step: pins the redex and its pieces over the page, and measures the layout.
     fn lift(&self, m: &Match, path: &Path) -> Lifted {
-        let rx = self.node(path);
         let pieces = m.pieces().iter().cloned().map(Piece::measured).collect::<Vec<Piece>>();
         pieces
             .iter()
             .enumerate()
             .filter(|(_, pc)| pc.travels())
             .for_each(|(i, pc)| Doc::write(pc.el(), Data::Piece, &i));
-        let husk = rx.and_then(|rx| Ghost::pin(&rx, None, false, &[]));
+        let husk = self.node(path).and_then(|rx| Ghost::pin(&rx, None, false, &[]));
         if let Some(husk) = &husk {
             Doc::all(husk, &Query::Has(Data::Piece))
                 .iter()
@@ -700,28 +738,26 @@ impl Bench {
                     let _ = e.style().set_property("visibility", "hidden");
                 });
         }
-        let pieces = pieces
-            .into_iter()
-            .map(|pc| {
-                Doc::erase(pc.el(), Data::Piece);
-                let ghost = pc.uid().and_then(|_| Ghost::pin(pc.el(), None, false, &[]));
-                pc.haunted(ghost)
-            })
-            .collect();
-        let layout = self
-            .line()
-            .map(|line| {
-                Doc::all(&line, &Query::Has(Data::Uid))
-                    .iter()
-                    .filter_map(|e| Some((Doc::read::<Uid>(e, Data::Uid)?, e.get_bounding_client_rect())))
-                    .collect()
-            })
-            .unwrap_or_default();
         Lifted {
             husk,
-            pieces,
+            pieces: pieces
+                .into_iter()
+                .map(|pc| {
+                    Doc::erase(pc.el(), Data::Piece);
+                    let ghost = pc.uid().and_then(|_| Ghost::pin(pc.el(), None, false, &[]));
+                    pc.haunted(ghost)
+                })
+                .collect(),
             stage: self.stage().as_ref().map(Element::get_bounding_client_rect),
-            layout,
+            layout: self
+                .line()
+                .map(|line| {
+                    Doc::all(&line, &Query::Has(Data::Uid))
+                        .iter()
+                        .filter_map(|e| Some((Doc::read::<Uid>(e, Data::Uid)?, e.get_bounding_client_rect())))
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -739,17 +775,14 @@ impl Bench {
                     .collect(),
             );
         };
-        let husk = lifted
-            .husk()
-            .map_or_else(Motion::none, |h| Motion::exit(h, Tween::default()));
-        let enter = Motion::enter(&result, Tween::default());
-        let travels = lifted
-            .pieces()
-            .iter()
-            .map(|pc| Self::travel(pc, &result))
-            .collect::<Vec<Option<Motion>>>();
-        let glide = self.glide(lifted, &result);
-        Motion::all(vec![husk, enter, Motion::stagger(Self::PIECES, travels), glide])
+        Motion::all(vec![
+            lifted
+                .husk()
+                .map_or_else(Motion::none, |h| Motion::exit(h, Tween::default())),
+            Motion::enter(&result, Tween::default()),
+            Motion::stagger(Self::PIECES, lifted.pieces().iter().map(|pc| Self::travel(pc, &result)).collect()),
+            self.glide(lifted, &result),
+        ])
     }
 
     fn travel(pc: &Piece, result: &Element) -> Option<Motion> {
@@ -770,10 +803,14 @@ impl Bench {
         let slot = pc.slot();
         let copies = hits.iter().enumerate().map(|(j, tg)| {
             let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
-            let marks = slot
-                .map(|s| vec![Class::Moving, Class::Slot(s), Class::Hard])
-                .unwrap_or_default();
-            let dst = Ghost::pin(tg, Some(&rect), true, &marks)?;
+            let dst = Ghost::pin(
+                tg,
+                Some(&rect),
+                true,
+                &slot
+                    .map(|s| vec![Class::Moving, Class::Slot(s), Class::Hard])
+                    .unwrap_or_default(),
+            )?;
             let (dx, dy) = Ghost::delta(&rect, &tg.get_bounding_client_rect());
             Doc::add(tg, &[Class::Arriving]);
             let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
@@ -799,11 +836,10 @@ impl Bench {
     }
 
     fn twin(g: &Element) -> Option<Element> {
-        let copy = g.clone_node_with_deep(true).ok()?;
         web_sys::window()?
             .document()?
             .body()?
-            .append_child(&copy)
+            .append_child(&g.clone_node_with_deep(true).ok()?)
             .ok()?
             .dyn_into::<Element>()
             .ok()
@@ -884,23 +920,28 @@ impl Bench {
             return None;
         }
         self.session().set_capture(b.naive(x, &arg));
-        let renamed = match redex.shape() {
-            Shape::Let(y, v, _) => Term::local(y.clone(), v.clone(), body),
-            _ => Term::app(Term::lam(x.clone(), body), arg),
-        };
-        let olds = log
-            .iter()
-            .map(|(a, _)| a.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
-        let moves = log
-            .iter()
-            .map(|(a, b)| format!("{a} → {b}"))
-            .collect::<Vec<String>>()
-            .join(", ");
         Some((
-            t.replace(path, renamed),
-            Note::from(format!("{moves}, so the argument’s free {olds} stays free").as_str()),
+            t.replace(
+                path,
+                match redex.shape() {
+                    Shape::Let(y, v, _) => Term::local(y.clone(), v.clone(), body),
+                    _ => Term::app(Term::lam(x.clone(), body), arg),
+                },
+            ),
+            Note::from(
+                format!(
+                    "{}, so the argument’s free {} stays free",
+                    log.iter()
+                        .map(|(a, b)| format!("{a} → {b}"))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    log.iter()
+                        .map(|(a, _)| a.to_string())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+                .as_str(),
+            ),
         ))
     }
 
@@ -924,8 +965,11 @@ impl Bench {
             lifted = Some(self.lift(&m, &path));
         }
         let (now, env) = (self.session().term(), self.session().env());
-        let next = now.replace(&path, now.at(&path).expect("a redex inside the term").contract(kind, &env));
-        self.session().push(Entry::new(next, Some(kind), None));
+        self.session().push(Entry::new(
+            now.replace(&path, now.at(&path).expect("a redex inside the term").contract(kind, &env)),
+            Some(kind),
+            None,
+        ));
         if let Some(lifted) = lifted {
             self.move_to(&lifted, &path).play(clock).await;
         }
@@ -1020,29 +1064,35 @@ impl Bench {
         };
         let avoid = b.names().into_iter().chain([x.clone()]).collect::<HashSet<Name>>();
         let names = Self::NAMES.map(Name::from);
-        let start = names.iter().position(|c| *c == x.stem()).map_or(0, |i| i + 1);
         let y = (0..names.len())
-            .map(|j| &names[(start + j) % names.len()])
+            .map(|j| &names[(names.iter().position(|c| *c == x.stem()).map_or(0, |i| i + 1) + j) % names.len()])
             .find(|c| !avoid.contains(*c) && !Consts::has(c))
             .cloned()
             .unwrap_or_else(|| x.fresh(&avoid));
-        let body = b.subst(&x, &Term::var(y.clone()), &HashSet::from([y.clone()]), Some(Mark::Renamed));
-        let m = match n.shape() {
-            Shape::Let(_, v, _) => Term::local(y.clone(), v.clone(), body),
-            _ => Term::lam(y.clone(), body),
-        }
-        .marked(Mark::Binder);
         *self.note().borrow_mut() = None;
         self.session().push(Entry::new(
-            t.replace(path, m),
+            t.replace(
+                path,
+                match n.shape() {
+                    Shape::Let(_, v, _) => Term::local(
+                        y.clone(),
+                        v.clone(),
+                        b.subst(&x, &Term::var(y.clone()), &HashSet::from([y.clone()]), Some(Mark::Renamed)),
+                    ),
+                    _ => Term::lam(
+                        y.clone(),
+                        b.subst(&x, &Term::var(y.clone()), &HashSet::from([y.clone()]), Some(Mark::Renamed)),
+                    ),
+                }
+                .marked(Mark::Binder),
+            ),
             Some(Kind::Alpha),
             Some(Note::from(format!("{x} → {y}").as_str())),
         ));
     }
 
     fn back(&self) {
-        let idx = self.session().idx();
-        if let Some(prev) = idx.back().filter(|_| !self.session().busy()) {
+        if let Some(prev) = self.session().idx().back().filter(|_| !self.session().busy()) {
             *self.note().borrow_mut() = None;
             self.session().seek(prev);
         }
@@ -1064,12 +1114,16 @@ impl Bench {
     }
 
     fn load(&self) {
-        let src = self
-            .source()
-            .as_ref()
-            .map(web_sys::HtmlTextAreaElement::value)
-            .unwrap_or_default();
-        if let Err(e) = self.session().load(&Source::from(src), None, self.session().eta()) {
+        if let Err(e) = self.session().load(
+            &Source::from(
+                self.source()
+                    .as_ref()
+                    .map(web_sys::HtmlTextAreaElement::value)
+                    .unwrap_or_default(),
+            ),
+            None,
+            self.session().eta(),
+        ) {
             if let Some(err) = self.q(&Class::Err.into()) {
                 err.set_text_content(Some(&e.to_string()));
                 Doc::hide(&err, false);
@@ -1128,8 +1182,9 @@ impl Bench {
     }
 
     fn pick(&self, e: &web_sys::Event) {
-        let row = Doc::target(e).and_then(|t| Doc::closest(&t, &Query::from(Class::Trace).within(Query::Has(Data::I))));
-        if let Some(i) = row.and_then(|r| Doc::read::<Step>(&r, Data::I))
+        if let Some(i) = Doc::target(e)
+            .and_then(|t| Doc::closest(&t, &Query::from(Class::Trace).within(Query::Has(Data::I))))
+            .and_then(|r| Doc::read::<Step>(&r, Data::I))
             && !self.session().busy()
         {
             *self.note().borrow_mut() = None;
@@ -1151,10 +1206,13 @@ impl Bench {
     }
 
     fn key(self: &Rc<Self>, e: &web_sys::KeyboardEvent) {
-        let typing = Doc::target(e).is_some_and(|t| {
-            Doc::closest(&t, &Query::from(Tag::Textarea).or(Tag::Input.into()).or(Tag::Select.into())).is_some()
-        });
-        if e.meta_key() || e.ctrl_key() || e.alt_key() || typing {
+        if e.meta_key()
+            || e.ctrl_key()
+            || e.alt_key()
+            || Doc::target(e).is_some_and(|t| {
+                Doc::closest(&t, &Query::from(Tag::Textarea).or(Tag::Input.into()).or(Tag::Select.into())).is_some()
+            })
+        {
             return;
         }
         let (busy, t, env, idx) =
@@ -1243,10 +1301,9 @@ impl Bench {
 
 #[component]
 pub fn Workbench() -> impl IntoView {
-    let session = expect_context::<StoredValue<Session, LocalStorage>>().get_value();
     let anchor = NodeRef::<html::Div>::new();
     let bench = Rc::new(Bench {
-        session,
+        session: expect_context::<StoredValue<Session, LocalStorage>>().get_value(),
         anchor,
         arcs: Cell::new(true),
         db: Cell::new(false),

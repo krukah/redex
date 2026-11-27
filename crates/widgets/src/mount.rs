@@ -57,11 +57,11 @@ impl Mount {
             })
             .forget();
         });
-        let first = els
-            .iter()
-            .find_map(|el| el.get_attribute(Data::Example.name()).filter(|e| !e.is_empty()))
-            .unwrap_or_else(|| "beta".to_string());
-        if let Some(ex) = Example::find(&first) {
+        if let Some(ex) = Example::find(
+            &els.iter()
+                .find_map(|el| el.get_attribute(Data::Example.name()).filter(|e| !e.is_empty()))
+                .unwrap_or_else(|| "beta".to_string()),
+        ) {
             session.load_example(ex);
         }
         session

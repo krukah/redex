@@ -113,20 +113,26 @@ impl Motion {
 
     /// Fade out where it stands, then remove it.
     pub fn exit(el: &Element, o: Tween) -> Self {
-        let from = web_sys::window()
-            .and_then(|w| w.get_computed_style(el).ok().flatten())
-            .and_then(|cs| cs.get_property_value(Prop::Opacity.key()).ok())
-            .unwrap_or_default();
-        let fade = Self::tween(
-            el,
-            &[
-                &[(Prop::Opacity, JsValue::from_str(&from))],
-                &[(Prop::Opacity, 0.into())],
-            ],
-            o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::Exit)).keep(),
-        );
-        let el = el.clone();
-        Self::seq(vec![fade, Self::act(move || el.remove())])
+        let gone = el.clone();
+        Self::seq(vec![
+            Self::tween(
+                el,
+                &[
+                    &[(
+                        Prop::Opacity,
+                        JsValue::from_str(
+                            &web_sys::window()
+                                .and_then(|w| w.get_computed_style(el).ok().flatten())
+                                .and_then(|cs| cs.get_property_value(Prop::Opacity.key()).ok())
+                                .unwrap_or_default(),
+                        ),
+                    )],
+                    &[(Prop::Opacity, 0.into())],
+                ],
+                o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::Exit)).keep(),
+            ),
+            Self::act(move || gone.remove()),
+        ])
     }
 
     /// Play back from an offset to where layout put it (FLIP).

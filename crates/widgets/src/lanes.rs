@@ -109,36 +109,44 @@ impl Track {
     }
 
     pub fn lanes(runs: &[Run], env: &term::Env) -> Node {
-        Node::list(runs.iter().zip(Self::LANES).map(|(r, l)| {
-            let (cls, msg) = Self::ending(r, env);
-            let rows = r.rows().iter().enumerate().map(|(i, row)| {
-                let text = row.term().text();
-                Node::el(Tag::Li)
-                    .attr(Attr::I(Step::new(i)))
-                    .kid(Letter::flat(row.kind()))
+        Node::list(runs.iter().zip(Self::LANES).map(|(r, l)| Self::lane(r, l, env)))
+    }
+
+    /// A lane: its strategy and count over every term it passed through, then how it ended.
+    fn lane(r: &Run, l: Lane, env: &term::Env) -> Node {
+        let (cls, msg) = Self::ending(r, env);
+        Node::el(Tag::Div)
+            .class([Class::Lane])
+            .kid(
+                Node::el(Tag::Header)
                     .kid(
-                        Node::el(Tag::Code)
-                            .attr(Attr::Title(text.clone()))
-                            .kid(Node::text(text)),
+                        Node::el(Tag::Div)
+                            .class([Class::LaneTop])
+                            .kid(Node::el(Tag::B).kid(Node::text(l.strategy().label())))
+                            .kid(Node::el(Tag::Span).class([Class::Count]).kid(Self::count(r))),
                     )
-            });
-            let end = Node::el(Tag::Li)
-                .class([Class::End, cls])
-                .attr(Attr::I(Step::new(r.rows().len())))
-                .kid(Node::text(msg));
-            let top = Node::el(Tag::Div)
-                .class([Class::LaneTop])
-                .kid(Node::el(Tag::B).kid(Node::text(l.strategy().label())))
-                .kid(Node::el(Tag::Span).class([Class::Count]).kid(Self::count(r)));
-            Node::el(Tag::Div)
-                .class([Class::Lane])
-                .kid(
-                    Node::el(Tag::Header)
-                        .kid(top)
-                        .kid(Node::el(Tag::P).kid(Node::text(l.sub()))),
-                )
-                .kid(Node::el(Tag::Ol).kids(rows).kid(end))
-        }))
+                    .kid(Node::el(Tag::P).kid(Node::text(l.sub()))),
+            )
+            .kid(
+                Node::el(Tag::Ol)
+                    .kids(r.rows().iter().enumerate().map(|(i, row)| Self::row(Step::new(i), row)))
+                    .kid(
+                        Node::el(Tag::Li)
+                            .class([Class::End, cls])
+                            .attr(Attr::I(Step::new(r.rows().len())))
+                            .kid(Node::text(msg)),
+                    ),
+            )
+    }
+
+    /// One term of a lane, with the rule that produced it.
+    fn row(i: Step, row: &Row) -> Node {
+        let text = row.term().text();
+        Node::el(Tag::Li).attr(Attr::I(i)).kid(Letter::flat(row.kind())).kid(
+            Node::el(Tag::Code)
+                .attr(Attr::Title(text.clone()))
+                .kid(Node::text(text)),
+        )
     }
 }
 
@@ -272,12 +280,10 @@ impl Stand {
 
 #[component]
 pub fn Lanes() -> impl IntoView {
-    let session = expect_context::<StoredValue<Session, LocalStorage>>().get_value();
-    let start = Race::find("dup").expect("the dup race exists");
     let stand = Rc::new(Stand {
-        session,
+        session: expect_context::<StoredValue<Session, LocalStorage>>().get_value(),
         anchor: NodeRef::new(),
-        pick: Cell::new(start),
+        pick: Cell::new(Race::find("dup").expect("the dup race exists")),
         drawn: Cell::new(false),
         timer: RefCell::new(None),
     });

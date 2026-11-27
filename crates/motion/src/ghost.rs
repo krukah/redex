@@ -31,21 +31,25 @@ impl Ghost {
         let cs = web_sys::window()?.get_computed_style(el).ok().flatten()?;
         let w = doc.create_element("div").ok()?;
         w.set_class_name(&Attr::Class(vec![Class::Redex, Class::Ghost]).to_string());
-        let inherited = Self::INHERITED
-            .iter()
-            .map(|p| format!("{p}:{}", cs.get_property_value(p).unwrap_or_default()))
-            .collect::<Vec<String>>()
-            .join(";");
-        let css = format!(
-            "left:{}px;top:{}px;width:{}px;height:{}px;{inherited}{}",
-            cx - Px::new(r.width()) / 2.0,
-            cy - Px::new(r.height()) / 2.0,
-            r.width(),
-            r.height(),
-            if hidden { ";opacity:0" } else { "" }
-        );
         if let Ok(style) = js_sys::Reflect::get(&w, &"style".into()) {
-            let _ = js_sys::Reflect::set(&style, &"cssText".into(), &css.into());
+            let _ = js_sys::Reflect::set(
+                &style,
+                &"cssText".into(),
+                &format!(
+                    "left:{}px;top:{}px;width:{}px;height:{}px;{}{}",
+                    cx - Px::new(r.width()) / 2.0,
+                    cy - Px::new(r.height()) / 2.0,
+                    r.width(),
+                    r.height(),
+                    Self::INHERITED
+                        .iter()
+                        .map(|p| format!("{p}:{}", cs.get_property_value(p).unwrap_or_default()))
+                        .collect::<Vec<String>>()
+                        .join(";"),
+                    if hidden { ";opacity:0" } else { "" }
+                )
+                .into(),
+            );
         }
         let copy = el.clone_node_with_deep(true).ok()?.dyn_into::<Element>().ok()?;
         [Class::Hot, Class::Soft, Class::Arriving].iter().for_each(|c| {
