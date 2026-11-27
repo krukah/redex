@@ -1,6 +1,5 @@
 use examples::*;
 use leptos::prelude::*;
-use markup::Selector;
 use markup::*;
 use wasm_bindgen::JsCast;
 
@@ -38,7 +37,7 @@ impl Mount {
     pub fn all(scope: &web_sys::Element) -> Session {
         let session = Session::default();
         let stored = StoredValue::new_local(session.clone());
-        let els = Doc::all(scope, &Selector::Has(Data::Redex))
+        let els = Doc::all(scope, &Query::Has(Data::Redex))
             .into_iter()
             .filter_map(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
             .collect::<Vec<web_sys::HtmlElement>>();

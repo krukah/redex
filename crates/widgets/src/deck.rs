@@ -2,7 +2,6 @@ use examples::*;
 use layout::*;
 use leptos::html;
 use leptos::prelude::*;
-use markup::Selector;
 use markup::*;
 use syntax::*;
 
@@ -89,7 +88,7 @@ pub fn Deck() -> impl IntoView {
             return;
         }
         let ex = shown.example();
-        Doc::all(&wrap, &Selector::Has(Data::Ex)).iter().for_each(|el| {
+        Doc::all(&wrap, &Query::Has(Data::Ex)).iter().for_each(|el| {
             let on = Doc::read::<Example>(el, Data::Ex) == ex;
             Doc::toggle(el, Class::On, on);
             Doc::put(el, &Attr::Pressed(on));
@@ -97,7 +96,7 @@ pub fn Deck() -> impl IntoView {
     });
     wrap.on_load(|el| Tiles::fill(&el));
     let click = move |e: web_sys::MouseEvent| {
-        let hit = Doc::target(&e).and_then(|t| Doc::closest(&t, &Selector::Has(Data::Ex)));
+        let hit = Doc::target(&e).and_then(|t| Doc::closest(&t, &Query::Has(Data::Ex)));
         if let Some(ex) = hit.and_then(|h| Doc::read::<Example>(&h, Data::Ex))
             && !session.busy()
         {

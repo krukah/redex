@@ -6,13 +6,11 @@ use explore::*;
 use layout::*;
 use leptos::html;
 use leptos::prelude::*;
-use markup::Selector;
 use markup::*;
 use motion::*;
 use rules::*;
 use strategy::*;
 use syntax::*;
-use term::Env;
 use term::*;
 use units::*;
 use wasm_bindgen::JsCast;
@@ -25,12 +23,12 @@ use crate::*;
 pub struct Chart {
     graph: Graph,
     plot: Plot,
-    env: Env,
+    env: term::Env,
     plate: Plate,
 }
 
 impl Chart {
-    fn env(&self) -> &Env {
+    fn env(&self) -> &term::Env {
         &self.env
     }
 
@@ -54,7 +52,7 @@ impl Chart {
         Some(Strategy::Whnf),
     ];
 
-    pub fn new(start: &Term, env: &Env, eta: bool, plate: Plate) -> Self {
+    pub fn new(start: &Term, env: &term::Env, eta: bool, plate: Plate) -> Self {
         let graph = Graph::explore(start, env, eta, Self::CAP);
         let plot = Plot::new(&graph, env);
         Self {
@@ -420,7 +418,7 @@ impl Board {
         &self.route
     }
 
-    fn q(&self, sel: &Selector) -> Option<Element> {
+    fn q(&self, sel: &Query) -> Option<Element> {
         Doc::above(self.anchor().get_untracked()).and_then(|r| Doc::q(&r, sel))
     }
 
@@ -433,8 +431,7 @@ impl Board {
     }
 
     fn eta(&self) -> Option<web_sys::HtmlInputElement> {
-        self.q(&Selector::is(Data::Opt, &Opt::Eta))
-            .and_then(|e| e.dyn_into().ok())
+        self.q(&Query::is(Data::Opt, &Opt::Eta)).and_then(|e| e.dyn_into().ok())
     }
 
     fn build(&self, start: &Term) {
@@ -484,7 +481,7 @@ impl Board {
     }
 
     fn render_routes(&self) {
-        if let Some(pills) = self.q(&Selector::Has(Data::Routes)) {
+        if let Some(pills) = self.q(&Query::Has(Data::Routes)) {
             Doc::fill(&pills, &Chart::pills(self.route().get()));
         }
         let (band, note) = self
@@ -492,7 +489,7 @@ impl Board {
             .borrow()
             .as_ref()
             .map_or_else(|| (Node::none(), String::new()), |c| c.band(self.route().get()));
-        if let Some(g) = self.q(&Selector::from(Class::Gsvg).within(Class::Routes.into())) {
+        if let Some(g) = self.q(&Query::from(Class::Gsvg).within(Class::Routes.into())) {
             Doc::fill(&g, &band);
         }
         if let Some(n) = self.q(&Class::RouteNote.into()) {
@@ -585,7 +582,7 @@ impl Board {
 
     fn click(&self, e: &web_sys::Event) {
         let Some(target) = Doc::target(e) else { return };
-        match Doc::closest(&target, &Selector::Has(Data::Act)).and_then(|a| Doc::read::<Act>(&a, Data::Act)) {
+        match Doc::closest(&target, &Query::Has(Data::Act)).and_then(|a| Doc::read::<Act>(&a, Data::Act)) {
             Some(Act::Rebuild) => self.build(&self.session().term()),
             Some(Act::Open) => {
                 if let Some(i) = self.sel().get() {
@@ -595,7 +592,7 @@ impl Board {
             _ => {}
         }
         if let Some(route) =
-            Doc::closest(&target, &Selector::Has(Data::Route)).and_then(|r| r.get_attribute(Data::Route.name()))
+            Doc::closest(&target, &Query::Has(Data::Route)).and_then(|r| r.get_attribute(Data::Route.name()))
         {
             self.route().set(
                 Chart::ROUTES

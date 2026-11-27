@@ -4,16 +4,16 @@ use markup::*;
 use wasm_bindgen::JsCast;
 use web_sys::Element;
 
-/// The DOM, typed: queries by `Selector`, data attributes read back into their types, classes by
+/// The DOM, typed: queries by `Query`, data attributes read back into their types, classes by
 /// `Class`, and markup built into real elements. Every query runs inside a widget's own root.
 pub struct Doc;
 
 impl Doc {
-    pub fn q(root: &Element, sel: &Selector) -> Option<Element> {
+    pub fn q(root: &Element, sel: &Query) -> Option<Element> {
         root.query_selector(&sel.to_string()).ok().flatten()
     }
 
-    pub fn all(root: &Element, sel: &Selector) -> Vec<Element> {
+    pub fn all(root: &Element, sel: &Query) -> Vec<Element> {
         root.query_selector_all(&sel.to_string())
             .map(|list| {
                 (0..list.length())
@@ -33,7 +33,7 @@ impl Doc {
         node.parent_element()
     }
 
-    pub fn closest(el: &Element, sel: &Selector) -> Option<Element> {
+    pub fn closest(el: &Element, sel: &Query) -> Option<Element> {
         el.closest(&sel.to_string()).ok().flatten()
     }
 

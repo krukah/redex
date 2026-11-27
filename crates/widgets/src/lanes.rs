@@ -5,13 +5,11 @@ use std::rc::Rc;
 use examples::*;
 use leptos::html;
 use leptos::prelude::*;
-use markup::Selector;
 use markup::*;
 use motion::*;
 use rules::*;
 use strategy::*;
 use syntax::*;
-use term::Env;
 use term::*;
 use units::*;
 use web_sys::Element;
@@ -58,7 +56,7 @@ impl Track {
     ];
 
     /// The start term and its definitions for a pick, if there is one yet.
-    pub fn source(pick: Race, session: &Session) -> Option<(Term, Env)> {
+    pub fn source(pick: Race, session: &Session) -> Option<(Term, term::Env)> {
         match pick.src() {
             None if !session.loaded() => None,
             None => Some((session.start(), session.env())),
@@ -66,7 +64,7 @@ impl Track {
         }
     }
 
-    pub fn runs((term, env): &(Term, Env)) -> Vec<Run> {
+    pub fn runs((term, env): &(Term, term::Env)) -> Vec<Run> {
         Self::LANES
             .iter()
             .map(|l| Run::new(term, env, l.strategy(), Self::CAP))
@@ -84,7 +82,7 @@ impl Track {
         }
     }
 
-    fn ending(r: &Run, env: &Env) -> (Class, String) {
+    fn ending(r: &Run, env: &term::Env) -> (Class, String) {
         match r.status() {
             Status::Cap => (Class::Loops, format!("Still going after {} steps. It loops.", Self::CAP)),
             Status::Big => (Class::Loops, "Stopped: the term keeps growing.".to_string()),
@@ -110,7 +108,7 @@ impl Track {
         }))
     }
 
-    pub fn lanes(runs: &[Run], env: &Env) -> Node {
+    pub fn lanes(runs: &[Run], env: &term::Env) -> Node {
         Node::list(runs.iter().zip(Self::LANES).map(|(r, l)| {
             let (cls, msg) = Self::ending(r, env);
             let rows = r.rows().iter().enumerate().map(|(i, row)| {
@@ -240,7 +238,7 @@ impl Stand {
 
     fn tick(self: &Rc<Self>, heat: &Rc<Heat>, i: Step) {
         heat.lanes().iter().zip(heat.runs()).for_each(|(l, run)| {
-            if let Some(li) = Doc::q(l, &Selector::from(Tag::Li).and(Selector::is(Data::I, &i))) {
+            if let Some(li) = Doc::q(l, &Query::from(Tag::Li).and(Query::is(Data::I, &i))) {
                 Doc::remove(&li, &[Class::Pending]);
                 leptos::task::spawn_local(
                     Motion::enter(&li, Tween::default().ms(Ms::new(300.0))).play(Clock::default()),
@@ -261,12 +259,12 @@ impl Stand {
     fn click(self: &Rc<Self>, e: &web_sys::Event) {
         let Some(target) = Doc::target(e) else { return };
         if let Some(race) =
-            Doc::closest(&target, &Selector::Has(Data::Race)).and_then(|p| Doc::read::<Race>(&p, Data::Race))
+            Doc::closest(&target, &Query::Has(Data::Race)).and_then(|p| Doc::read::<Race>(&p, Data::Race))
         {
             self.pick().set(race);
             self.render(true);
         }
-        if Doc::closest(&target, &Selector::is(Data::Act, &Act::Race)).is_some() {
+        if Doc::closest(&target, &Query::is(Data::Act, &Act::Race)).is_some() {
             self.render(true);
         }
     }

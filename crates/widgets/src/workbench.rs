@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use leptos::html;
 use leptos::prelude::*;
-use markup::Selector;
 use markup::*;
 use motion::*;
 use rules::*;
@@ -167,9 +166,9 @@ impl Links {
         }
         let base = stage.get_bounding_client_rect();
         let ceiling = Px::new(line.get_bounding_client_rect().top() - base.top() - 30.0);
-        let arcs = Doc::all(line, &Selector::Has(Data::Bid)).into_iter().filter_map(|v| {
+        let arcs = Doc::all(line, &Query::Has(Data::Bid)).into_iter().filter_map(|v| {
             let id = Doc::read::<Anchor>(&v, Data::Bid)?;
-            let anchor = Doc::q(line, &Selector::is(Data::Anchor, &id))?;
+            let anchor = Doc::q(line, &Query::is(Data::Anchor, &id))?;
             let (a, b) = (anchor.get_bounding_client_rect(), v.get_bounding_client_rect());
             let (x1, x2) =
                 (Px::new(a.left() + a.width() / 2.0 - base.left()), Px::new(b.left() + b.width() / 2.0 - base.left()));
@@ -302,7 +301,7 @@ impl Bench {
         Doc::above(self.anchor().get_untracked())
     }
 
-    fn q(&self, sel: &Selector) -> Option<Element> {
+    fn q(&self, sel: &Query) -> Option<Element> {
         self.root().and_then(|r| Doc::q(&r, sel))
     }
 
@@ -315,15 +314,15 @@ impl Bench {
     }
 
     fn node(&self, p: &Path) -> Option<Element> {
-        self.line().and_then(|l| Doc::q(&l, &Selector::is(Data::Path, p)))
+        self.line().and_then(|l| Doc::q(&l, &Query::is(Data::Path, p)))
     }
 
     fn button(&self, act: Act) -> Option<web_sys::HtmlButtonElement> {
-        self.q(&Selector::is(Data::Act, &act)).and_then(|b| b.dyn_into().ok())
+        self.q(&Query::is(Data::Act, &act)).and_then(|b| b.dyn_into().ok())
     }
 
     fn source(&self) -> Option<web_sys::HtmlTextAreaElement> {
-        self.q(&Selector::from(Class::Src).within(Tag::Textarea.into()))
+        self.q(&Query::from(Class::Src).within(Tag::Textarea.into()))
             .and_then(|e| e.dyn_into().ok())
     }
 
@@ -448,7 +447,7 @@ impl Bench {
 
     fn render_trace(&self) {
         let Some(ol) = self
-            .q(&Selector::from(Class::Trace).within(Tag::Ol.into()))
+            .q(&Query::from(Class::Trace).within(Tag::Ol.into()))
             .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
         else {
             return;
@@ -538,9 +537,9 @@ impl Bench {
                 let owner = self.node(&path.join(b.rel()))?;
                 let piece = Piece::new(b.var(), schema.slot(b.var()), owner.clone());
                 if b.is_binder() {
-                    let tab = Doc::q(&owner, &Selector::Scope.child(Class::Tab.into()).child(Class::Binder.into()))
+                    let tab = Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Binder.into()))
                         .or_else(|| {
-                            Doc::q(&owner, &Selector::Scope.child(Class::Tab.into()).child(Class::Keyword.into()))
+                            Doc::q(&owner, &Query::Scope.child(Class::Tab.into()).child(Class::Keyword.into()))
                         })?;
                     Some(Piece {
                         el: tab,
@@ -558,8 +557,8 @@ impl Bench {
             .collect::<Vec<Piece>>();
         if kind == Kind::Delta {
             let body = redex.name().and_then(|n| {
-                self.q(&Selector::from(Class::DefsList)
-                    .within(Selector::is(Data::Def, n))
+                self.q(&Query::from(Class::DefsList)
+                    .within(Query::is(Data::Def, n))
                     .child(Class::Block.into()))
             });
             if let Some(body) = body {
@@ -581,7 +580,7 @@ impl Bench {
             let classes = [Class::Moving, Class::Slot(slot), strength];
             Doc::add(pc.el(), &classes);
             if let (Some(b), Some(line)) = (pc.binder(), &line) {
-                Doc::all(line, &Selector::is(Data::Bid, &b))
+                Doc::all(line, &Query::is(Data::Bid, &b))
                     .iter()
                     .for_each(|v| Doc::add(v, &classes));
             }
@@ -674,9 +673,9 @@ impl Bench {
             .iter()
             .for_each(|e| Doc::remove(e, &[Class::Lighted]));
         if let Some(id) = id {
-            let sel = Selector::is(Data::Id, &id)
-                .or(Selector::is(Data::Bid, &id))
-                .or(Selector::from(Class::Binder).and(Selector::is(Data::Anchor, &id)));
+            let sel = Query::is(Data::Id, &id)
+                .or(Query::is(Data::Bid, &id))
+                .or(Query::from(Class::Binder).and(Query::is(Data::Anchor, &id)));
             Doc::all(&stage, &sel)
                 .iter()
                 .for_each(|e| Doc::add(e, &[Class::Lighted]));
@@ -694,7 +693,7 @@ impl Bench {
             .for_each(|(i, pc)| Doc::write(pc.el(), Data::Piece, &i));
         let husk = rx.and_then(|rx| Ghost::pin(&rx, None, false, &[]));
         if let Some(husk) = &husk {
-            Doc::all(husk, &Selector::Has(Data::Piece))
+            Doc::all(husk, &Query::Has(Data::Piece))
                 .iter()
                 .filter_map(|e| e.dyn_ref::<web_sys::HtmlElement>().cloned())
                 .for_each(|e| {
@@ -712,7 +711,7 @@ impl Bench {
         let layout = self
             .line()
             .map(|line| {
-                Doc::all(&line, &Selector::Has(Data::Uid))
+                Doc::all(&line, &Query::Has(Data::Uid))
                     .iter()
                     .filter_map(|e| Some((Doc::read::<Uid>(e, Data::Uid)?, e.get_bounding_client_rect())))
                     .collect()
@@ -757,7 +756,7 @@ impl Bench {
         let ghost = pc.ghost()?.clone();
         let uid = pc.uid();
         let hits = std::iter::once(result.clone())
-            .chain(Doc::all(result, &Selector::Has(Data::Uid).or(Selector::Has(Data::From))))
+            .chain(Doc::all(result, &Query::Has(Data::Uid).or(Query::Has(Data::From))))
             .filter(|e| Doc::read::<Uid>(e, Data::Uid) == uid || Doc::read::<Uid>(e, Data::From) == uid)
             .collect::<Vec<Element>>();
         if hits.is_empty() {
@@ -1090,7 +1089,7 @@ impl Bench {
         }
         let Some(target) = Doc::target(e) else { return };
         self.set_hot(Doc::closest(&target, &Class::Rr.into()));
-        let b = Doc::closest(&target, &Selector::Has(Data::Bid).or(Class::Binder.into()));
+        let b = Doc::closest(&target, &Query::Has(Data::Bid).or(Class::Binder.into()));
         self.set_lit(
             b.and_then(|b| Doc::read::<Anchor>(&b, Data::Bid).or_else(|| Doc::read::<Anchor>(&b, Data::Anchor))),
         );
@@ -1129,8 +1128,7 @@ impl Bench {
     }
 
     fn pick(&self, e: &web_sys::Event) {
-        let row =
-            Doc::target(e).and_then(|t| Doc::closest(&t, &Selector::from(Class::Trace).within(Selector::Has(Data::I))));
+        let row = Doc::target(e).and_then(|t| Doc::closest(&t, &Query::from(Class::Trace).within(Query::Has(Data::I))));
         if let Some(i) = row.and_then(|r| Doc::read::<Step>(&r, Data::I))
             && !self.session().busy()
         {
@@ -1154,13 +1152,7 @@ impl Bench {
 
     fn key(self: &Rc<Self>, e: &web_sys::KeyboardEvent) {
         let typing = Doc::target(e).is_some_and(|t| {
-            Doc::closest(
-                &t,
-                &Selector::from(Tag::Textarea)
-                    .or(Tag::Input.into())
-                    .or(Tag::Select.into()),
-            )
-            .is_some()
+            Doc::closest(&t, &Query::from(Tag::Textarea).or(Tag::Input.into()).or(Tag::Select.into())).is_some()
         });
         if e.meta_key() || e.ctrl_key() || e.alt_key() || typing {
             return;
