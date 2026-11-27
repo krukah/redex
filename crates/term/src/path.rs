@@ -19,17 +19,17 @@ impl Path {
         self.0.chars()
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     /// Drops the last step.
     pub fn parent(&self) -> Self {
         Self(self.0.chars().take(self.0.chars().count().saturating_sub(1)).collect())
+    }
+}
+
+impl std::str::FromStr for Path {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_string()))
     }
 }
 

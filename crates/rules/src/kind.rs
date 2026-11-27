@@ -27,8 +27,7 @@ impl Kind {
         Self::Proj,
     ];
 
-    /// The name the JS engine uses (`etaS` included).
-    pub fn name(self) -> &'static str {
+    fn name(self) -> &'static str {
         match self {
             Self::Alpha => "alpha",
             Self::Beta => "beta",
@@ -41,28 +40,24 @@ impl Kind {
         }
     }
 
-    pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|k| k.name() == name)
-    }
-
-    /// The ink class suffix: `k-…`.
-    pub fn class(self) -> &'static str {
+    /// The rule whose ink and letter this one wears: η for structures wears η's.
+    pub fn ink(self) -> Kind {
         match self {
-            Self::EtaS => "eta",
-            _ => self.name(),
+            Self::EtaS => Self::Eta,
+            _ => self,
         }
     }
 
-    pub fn glyph(self) -> &'static str {
-        match self {
-            Self::Alpha => "α",
-            Self::Beta => "β",
-            Self::Eta | Self::EtaS => "η",
-            Self::Delta => "δ",
-            Self::Zeta => "ζ",
-            Self::Iota => "ι",
-            Self::Proj => "π",
-        }
+    pub fn glyph(self) -> Glyph {
+        Glyph::new(match self {
+            Self::Alpha => 'α',
+            Self::Beta => 'β',
+            Self::Eta | Self::EtaS => 'η',
+            Self::Delta => 'δ',
+            Self::Zeta => 'ζ',
+            Self::Iota => 'ι',
+            Self::Proj => 'π',
+        })
     }
 
     pub fn is_eta(self) -> bool {
@@ -78,7 +73,7 @@ impl Kind {
             Self::Delta => "{c}  ⟶  the definition of {c}",
             Self::Iota if Self::zero(t) => "Nat.rec {z} {s} 0  ⟶  {z}",
             Self::Iota => "Nat.rec {z} {s} (succ {n})  ⟶  {s} {n} (Nat.rec {z} {s} {n})",
-            Self::Proj if matches!(t.shape(), Shape::Proj(1, _)) => "({a}, {b}).1  ⟶  {a}",
+            Self::Proj if matches!(t.shape(), Shape::Proj(Field::First, _)) => "({a}, {b}).1  ⟶  {a}",
             Self::Proj => "({a}, {b}).2  ⟶  {b}",
             Self::Eta => "λ{x}. {f} {x}  ⟶  {f}",
             Self::EtaS => "({p}.1, {p}.2)  ⟶  {p}",
@@ -116,5 +111,20 @@ impl Kind {
     fn zero(t: &Term) -> bool {
         t.rec_args()
             .is_some_and(|(_, _, n)| matches!(n.shape(), Shape::Const(_)))
+    }
+}
+
+impl std::fmt::Display for Kind {
+    /// The name the JS engine uses (`etaS` included).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl std::str::FromStr for Kind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL.into_iter().find(|k| k.name() == s).ok_or(())
     }
 }

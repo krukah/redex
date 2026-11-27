@@ -47,3 +47,11 @@ impl Race {
         self.src
     }
 }
+
+impl std::str::FromStr for Race {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::find(s).ok_or(())
+    }
+}

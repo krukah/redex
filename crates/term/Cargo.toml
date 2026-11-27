@@ -9,6 +9,7 @@ publish.workspace      = true
 description  = "Lambda terms: nodes, provenance, paths, names, α-keys"
 
 [dependencies]
+units = { workspace = true }
 
 [lints]
 workspace = true

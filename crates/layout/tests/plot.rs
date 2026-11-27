@@ -1,8 +1,8 @@
 use explore::*;
 use layout::*;
 use serde_json::Value;
+use strategy::*;
 use syntax::*;
-use term::*;
 
 /// The graph widget's drawing of one term, as `scripts/golden-dom.mjs` read it from the JS page.
 struct Drawn(Value);
@@ -48,7 +48,7 @@ impl Drawn {
             .expect("two drawings")
             .iter()
             .flat_map(|want| {
-                let g = Graph::explore(prog.term(), prog.env(), want["eta"].as_bool().expect("eta"), 70);
+                let g = Graph::explore(prog.term(), prog.env(), want["eta"].as_bool().expect("eta"), Cap::new(70));
                 let plot = Plot::new(&g, prog.env());
                 let svg = want["svg"].as_str().expect("svg");
                 let hits = Self::tags(svg, "<circle class=\"hit\"")
@@ -59,16 +59,15 @@ impl Drawn {
                     .iter()
                     .map(|t| Self::attr(t, "d"))
                     .collect::<Vec<String>>();
-                let got = plot
-                    .spots()
-                    .iter()
-                    .map(|s| (Number::show(s.x()), Number::show(s.y())))
+                let got = g
+                    .vertices()
+                    .map(|(i, _)| (plot.spot(i).x().to_string(), plot.spot(i).y().to_string()))
                     .collect::<Vec<(String, String)>>();
                 [
-                    (want["width"].as_str() != Some(&Number::show(plot.width())), "width"),
-                    (want["height"].as_str() != Some(&Number::show(plot.height())), "height"),
+                    (want["width"].as_str() != Some(&plot.width().to_string()), "width"),
+                    (want["height"].as_str() != Some(&plot.height().to_string()), "height"),
                     (hits != got, "spots"),
-                    (paths != plot.routes(), "routes"),
+                    (paths != plot.routes().iter().map(ToString::to_string).collect::<Vec<String>>(), "routes"),
                 ]
                 .into_iter()
                 .filter(|(bad, _)| *bad)

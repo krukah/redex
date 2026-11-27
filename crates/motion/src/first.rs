@@ -4,15 +4,15 @@ use std::task::Context;
 use std::task::Poll;
 
 /// A future that resolves when the first of its two futures does, like `Promise.race`.
-pub struct Race(Pin<Box<dyn Future<Output = ()>>>, Pin<Box<dyn Future<Output = ()>>>);
+pub struct First(Pin<Box<dyn Future<Output = ()>>>, Pin<Box<dyn Future<Output = ()>>>);
 
-impl Race {
+impl First {
     pub fn new(a: Pin<Box<dyn Future<Output = ()>>>, b: Pin<Box<dyn Future<Output = ()>>>) -> Self {
         Self(a, b)
     }
 }
 
-impl Future for Race {
+impl Future for First {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {

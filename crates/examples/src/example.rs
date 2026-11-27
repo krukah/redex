@@ -206,3 +206,11 @@ let p := (double 1, b); p.1",
         self.src
     }
 }
+
+impl std::str::FromStr for Example {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::find(s).ok_or(())
+    }
+}

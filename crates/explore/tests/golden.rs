@@ -43,19 +43,19 @@ impl Case {
 
     /// The fixture's view of the source, computed by the Rust engine.
     fn study(&self) -> Value {
-        let base = Term::var("_").uid().get();
+        let base = Term::var("_").uid();
         let prog = Program::parse(self.src()).expect("fixtures parse");
         let (term, env) = (prog.term(), prog.env());
-        let mut fv = term.fv().into_iter().collect::<Vec<String>>();
+        let mut fv = term.fv().iter().map(ToString::to_string).collect::<Vec<String>>();
         fv.sort();
         json!({
             "src": self.src(),
             "eta": self.eta(),
-            "notes": prog.notes(),
-            "env": env.iter().map(|(n, b)| json!({ "name": n, "text": b.text(), "tree": b.dump(base) })).collect::<Vec<Value>>(),
+            "notes": prog.notes().iter().map(ToString::to_string).collect::<Vec<String>>(),
+            "env": env.iter().map(|(n, b)| json!({ "name": n.to_string(), "text": b.text(), "tree": b.dump(base) })).collect::<Vec<Value>>(),
             "text": term.text(),
-            "key": term.key(),
-            "size": term.size(),
+            "key": term.key().to_string(),
+            "size": term.size().get(),
             "tree": term.dump(base),
             "fv": fv,
             "redexes": term.redexes(env).iter().map(|r| Self::redex(term, env, r, base)).collect::<Vec<Value>>(),
@@ -72,15 +72,15 @@ impl Case {
         })
     }
 
-    fn redex(term: &Term, env: &Env, r: &Redex, base: u64) -> Value {
+    fn redex(term: &Term, env: &Env, r: &Redex, base: Uid) -> Value {
         let node = term.at(r.path()).expect("a redex inside its term");
         let schema = r.kind().schema(node);
         let mut entry = json!({
-            "path": r.path().as_str(),
-            "kind": r.kind().name(),
+            "path": r.path().to_string(),
+            "kind": r.kind().to_string(),
             "schema": schema.text(),
-            "vars": schema.vars(),
-            "bindings": r.kind().bindings(node).iter().map(|b| json!([b.name(), b.rel().as_str(), b.is_binder()])).collect::<Vec<Value>>(),
+            "vars": schema.vars().iter().map(ToString::to_string).collect::<Vec<String>>(),
+            "bindings": r.kind().bindings(node).iter().map(|b| json!([b.var().to_string(), b.rel().to_string(), b.is_binder()])).collect::<Vec<Value>>(),
         });
         let lam = match (r.kind(), node.shape()) {
             (Kind::Beta, Shape::App(f, a)) => Some((f.clone(), a.clone())),
@@ -95,7 +95,11 @@ impl Case {
             let mut log = Vec::new();
             let body = b.prepare(&x, &arg.fv(), &mut log);
             let naive = b.naive(&x, &arg);
-            entry["log"] = json!(log.iter().map(|(a, b)| json!([a, b])).collect::<Vec<Value>>());
+            entry["log"] = json!(
+                log.iter()
+                    .map(|(a, b)| json!([a.to_string(), b.to_string()]))
+                    .collect::<Vec<Value>>()
+            );
             entry["prepared"] = json!(body.dump(base));
             entry["naive"] = json!(naive.dump(base));
             entry["naiveText"] = json!(naive.text());
@@ -108,22 +112,22 @@ impl Case {
 
     fn runs(term: &Term, env: &Env, strategy: Strategy) -> Value {
         let run = |cap| {
-            let r = Run::new(term, env, strategy, cap);
+            let r = Run::new(term, env, strategy, Cap::new(cap));
             json!({
                 "status": r.status().name(),
-                "rows": r.rows().iter().map(|row| json!([row.kind().map(Kind::name), row.term().text()])).collect::<Vec<Value>>(),
+                "rows": r.rows().iter().map(|row| json!([row.kind().map(|k| k.to_string()), row.term().text()])).collect::<Vec<Value>>(),
             })
         };
         json!({ "24": run(24), "200": run(200) })
     }
 
     fn graph(term: &Term, env: &Env, eta: bool, cap: usize) -> Value {
-        let g = Graph::explore(term, env, eta, cap);
+        let g = Graph::explore(term, env, eta, Cap::new(cap));
         json!({
             "truncated": g.truncated(),
             "cycle": g.cyclic(),
-            "nodes": g.vertices().iter().map(|v| json!([v.key(), v.term().text(), v.depth(), v.parent(), v.pkind().map(Kind::name), v.nf(), v.open()])).collect::<Vec<Value>>(),
-            "edges": g.edges().iter().map(|e| json!([e.from(), e.to(), e.kind().name()])).collect::<Vec<Value>>(),
+            "nodes": g.vertices().map(|(_, v)| json!([v.key().to_string(), v.term().text(), v.depth().get(), v.parent().map(Id::get), v.pkind().map(|k| k.to_string()), v.nf(), v.open()])).collect::<Vec<Value>>(),
+            "edges": g.edges().iter().map(|e| json!([e.from().get(), e.to().get(), e.kind().to_string()])).collect::<Vec<Value>>(),
         })
     }
 
@@ -185,10 +189,10 @@ fn parse_errors_read_as_in_js() {
                 "src": src,
                 "error": null,
                 "text": p.term().text(),
-                "notes": p.notes(),
-                "defs": p.env().iter().map(|(n, b)| json!([n, b.text()])).collect::<Vec<Value>>(),
+                "notes": p.notes().iter().map(ToString::to_string).collect::<Vec<String>>(),
+                "defs": p.env().iter().map(|(n, b)| json!([n.to_string(), b.text()])).collect::<Vec<Value>>(),
             }),
-            Err(e) => json!({ "src": src, "error": e, "text": null, "notes": null, "defs": null }),
+            Err(e) => json!({ "src": src, "error": e.to_string(), "text": null, "notes": null, "defs": null }),
         };
         assert_eq!(got, want);
     });

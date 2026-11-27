@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -5,12 +6,15 @@ use std::rc::Rc;
 
 use leptos::html;
 use leptos::prelude::*;
+use markup::Selector;
+use markup::*;
 use motion::*;
 use rules::*;
 use strategy::*;
 use subst::*;
 use syntax::*;
 use term::*;
+use units::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::DomRect;
@@ -29,41 +33,168 @@ enum Mode {
 /// One pattern variable's piece of the term while a redex is matched.
 #[derive(Clone)]
 struct Piece {
-    name: &'static str,
-    slot: usize,
+    var: Var,
+    slot: Option<Slot>,
     el: Element,
-    uid: Option<String>,
-    binder: Option<String>,
+    uid: Option<Uid>,
+    binder: Option<Anchor>,
     text: Option<String>,
     external: bool,
     rect: Option<DomRect>,
     ghost: Option<Element>,
 }
 
-/// A redex matched against its rule: the schema, its variables, and the pieces they bound.
+impl Piece {
+    fn new(var: Var, slot: Option<Slot>, el: Element) -> Self {
+        Self {
+            var,
+            slot,
+            el,
+            uid: None,
+            binder: None,
+            text: None,
+            external: false,
+            rect: None,
+            ghost: None,
+        }
+    }
+
+    fn var(&self) -> Var {
+        self.var
+    }
+
+    fn slot(&self) -> Option<Slot> {
+        self.slot
+    }
+
+    fn el(&self) -> &Element {
+        &self.el
+    }
+
+    fn uid(&self) -> Option<Uid> {
+        self.uid
+    }
+
+    fn binder(&self) -> Option<Anchor> {
+        self.binder
+    }
+
+    fn text(&self) -> Option<&String> {
+        self.text.as_ref()
+    }
+
+    fn external(&self) -> bool {
+        self.external
+    }
+
+    fn rect(&self) -> Option<&DomRect> {
+        self.rect.as_ref()
+    }
+
+    fn ghost(&self) -> Option<&Element> {
+        self.ghost.as_ref()
+    }
+
+    /// A piece of the term moves; a binder's tab and a definition's body stay where they are.
+    fn travels(&self) -> bool {
+        self.uid.is_some() && !self.external
+    }
+
+    fn measured(self) -> Self {
+        let rect = Some(self.el().get_bounding_client_rect());
+        Self { rect, ..self }
+    }
+
+    fn haunted(self, ghost: Option<Element>) -> Self {
+        Self { ghost, ..self }
+    }
+}
+
+/// A redex matched against its rule: the schema and the pieces its variables bound.
 struct Match {
     schema: Schema,
-    vars: Vec<&'static str>,
     pieces: Vec<Piece>,
+}
+
+impl Match {
+    fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    fn pieces(&self) -> &[Piece] {
+        &self.pieces
+    }
 }
 
 /// The redex pinned over the page before a step, and the layout it left.
 struct Lifted {
     husk: Option<Element>,
     pieces: Vec<Piece>,
-    layout: HashMap<String, DomRect>,
+    stage: Option<DomRect>,
+    layout: HashMap<Uid, DomRect>,
 }
 
-/// The workbench's own state, beside the session.
-#[derive(Default)]
-struct Local {
-    arcs: bool,
-    db: bool,
-    hot: Option<Element>,
-    running: Option<Mode>,
-    stop: bool,
-    note: String,
-    raf: i32,
+impl Lifted {
+    fn husk(&self) -> Option<&Element> {
+        self.husk.as_ref()
+    }
+
+    fn pieces(&self) -> &[Piece] {
+        &self.pieces
+    }
+
+    fn stage(&self) -> Option<&DomRect> {
+        self.stage.as_ref()
+    }
+
+    fn layout(&self) -> &HashMap<Uid, DomRect> {
+        &self.layout
+    }
+}
+
+/// One arc from each bound occurrence up to its binder. Both ends rise to a shared apex; longer
+/// links rise higher, never past the ceiling.
+struct Links;
+
+impl Links {
+    fn draw(stage: &Element, line: &Element, on: bool) {
+        let Some(svg) = Doc::q(stage, &Class::Arcs.into()) else {
+            return;
+        };
+        if !on {
+            Doc::fill(&svg, &Node::none());
+            return;
+        }
+        let base = stage.get_bounding_client_rect();
+        let ceiling = Px::new(line.get_bounding_client_rect().top() - base.top() - 30.0);
+        let arcs = Doc::all(line, &Selector::Has(Data::Bid)).into_iter().filter_map(|v| {
+            let id = Doc::read::<Anchor>(&v, Data::Bid)?;
+            let anchor = Doc::q(line, &Selector::is(Data::Anchor, &id))?;
+            let (a, b) = (anchor.get_bounding_client_rect(), v.get_bounding_client_rect());
+            let (x1, x2) =
+                (Px::new(a.left() + a.width() / 2.0 - base.left()), Px::new(b.left() + b.width() / 2.0 - base.left()));
+            let (y1, y2) = (Px::new(a.top() - base.top() + 2.0), Px::new(b.top() - base.top() + 2.0));
+            let apex = ceiling.max(y1.min(y2) - Px::new(10.0) - (x2 - x1).abs() * 0.12);
+            let cap = Doc::has(&v, Class::Cap).then_some(Class::Cap);
+            let f = Num::Tenths;
+            Some(Node::list([
+                Node::el(Tag::Path)
+                    .class([Class::Arc].into_iter().chain(cap))
+                    .attr(Attr::Arc(id))
+                    .attr(Attr::D(Trace::spaced(vec![
+                        Seg::Move(f(x1), f(y1)),
+                        Seg::Cubic(f(x1), f(apex), f(x2), f(apex), f(x2), f(y2)),
+                    ]))),
+                Node::el(Tag::Circle)
+                    .class([Class::ArcEnd].into_iter().chain(cap))
+                    .attr(Attr::Arc(id))
+                    .attr(Attr::Cx(f(x2)))
+                    .attr(Attr::Cy(f(y2)))
+                    .attr(Attr::R(Num::Js(Px::new(2.2)))),
+            ]))
+        });
+        Doc::fill(&svg, &Node::list(arcs));
+    }
 }
 
 /// The workbench. Every firing follows one grammar: match (hovering a badge shows the rule's
@@ -72,20 +203,65 @@ struct Local {
 struct Bench {
     session: Session,
     anchor: NodeRef<html::Div>,
-    local: RefCell<Local>,
+    arcs: Cell<bool>,
+    db: Cell<bool>,
+    hot: RefCell<Option<Element>>,
+    running: Cell<Option<Mode>>,
+    stop: Cell<bool>,
+    note: RefCell<Option<Note>>,
+    raf: Cell<i32>,
 }
 
 impl Bench {
-    const HINT: &'static str = "Hover a badge to see its rule match. Click to fire it. Click a binder to rename it. <kbd>→</kbd> steps, <kbd>←</kbd> goes back.";
     const NAMES: [&'static str; 20] = [
         "x", "y", "z", "w", "u", "v", "a", "b", "c", "f", "g", "h", "k", "m", "n", "p", "q", "r", "s", "t",
     ];
     /// How long a firing shows its match before anything moves, at speed 1.
-    const HOLD: f64 = 560.0;
+    const HOLD: Ms = Ms::new(560.0);
     /// How long an automatic α step stays on screen before its β fires.
-    const RENAME: f64 = 1000.0;
+    const RENAME: Ms = Ms::new(1000.0);
+    /// Between the pieces of a firing, and between the copies of one piece.
+    const PIECES: Ms = Ms::new(50.0);
+    const COPIES: Ms = Ms::new(40.0);
+    /// How much of a bound piece the rule card shows, in UTF-16 units as the JS counts them.
+    const SHORT: usize = 34;
+    /// A run stops after this many steps, or once the term passes this size.
+    const STEPS: Step = Step::new(200);
+    const LARGE: Size = Size::new(2000);
 
-    fn rule_name(kind: Kind) -> &'static str {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn arcs(&self) -> &Cell<bool> {
+        &self.arcs
+    }
+
+    fn db(&self) -> &Cell<bool> {
+        &self.db
+    }
+
+    fn hot(&self) -> &RefCell<Option<Element>> {
+        &self.hot
+    }
+
+    fn running(&self) -> &Cell<Option<Mode>> {
+        &self.running
+    }
+
+    fn stop(&self) -> &Cell<bool> {
+        &self.stop
+    }
+
+    fn note(&self) -> &RefCell<Option<Note>> {
+        &self.note
+    }
+
+    fn raf(&self) -> &Cell<i32> {
+        &self.raf
+    }
+
+    fn rule(kind: Kind) -> &'static str {
         match kind {
             Kind::Alpha => "α-conversion",
             Kind::Beta => "β-reduction",
@@ -98,50 +274,64 @@ impl Bench {
         }
     }
 
-    /// The text cut to `n` UTF-16 units, as `String.prototype.slice` counts them.
-    fn short(s: &str, n: usize) -> String {
+    /// The text cut to `SHORT` UTF-16 units, as `String.prototype.slice` counts them.
+    fn short(s: &str) -> String {
         let units = s.encode_utf16().collect::<Vec<u16>>();
-        if units.len() > n {
-            String::from_utf16_lossy(&units[..n - 1]) + "…"
+        if units.len() > Self::SHORT {
+            String::from_utf16_lossy(&units[..Self::SHORT - 1]) + "…"
         } else {
             s.to_string()
         }
     }
 
-    fn root(&self) -> Option<Element> {
-        self.anchor.get_untracked().and_then(|a| a.parent_element())
+    fn hint() -> Node {
+        Node::el(Tag::P).class([Class::Hint]).kids([
+            Node::text("Hover a badge to see its rule match. Click to fire it. Click a binder to rename it. "),
+            Node::el(Tag::Kbd).kid(Node::text("→")),
+            Node::text(" steps, "),
+            Node::el(Tag::Kbd).kid(Node::text("←")),
+            Node::text(" goes back."),
+        ])
     }
 
-    fn q(&self, sel: &str) -> Option<Element> {
+    fn root(&self) -> Option<Element> {
+        Doc::above(self.anchor.get_untracked())
+    }
+
+    fn q(&self, sel: &Selector) -> Option<Element> {
         self.root().and_then(|r| Doc::q(&r, sel))
     }
 
     fn line(&self) -> Option<Element> {
-        self.q(".rdx-line")
+        self.q(&Class::Line.into())
     }
 
     fn stage(&self) -> Option<Element> {
-        self.q(".rdx-stage")
+        self.q(&Class::Stage.into())
     }
 
     fn node(&self, p: &Path) -> Option<Element> {
-        self.line().and_then(|l| Doc::q(&l, &format!("[data-path=\"{p}\"]")))
+        self.line().and_then(|l| Doc::q(&l, &Selector::is(Data::Path, p)))
     }
 
-    fn button(&self, act: &str) -> Option<web_sys::HtmlButtonElement> {
-        self.q(&format!("[data-act=\"{act}\"]")).and_then(|b| b.dyn_into().ok())
+    fn button(&self, act: Act) -> Option<web_sys::HtmlButtonElement> {
+        self.q(&Selector::is(Data::Act, &act)).and_then(|b| b.dyn_into().ok())
+    }
+
+    fn source(&self) -> Option<web_sys::HtmlTextAreaElement> {
+        self.q(&Selector::from(Class::Src).within(Tag::Textarea.into()))
+            .and_then(|e| e.dyn_into().ok())
     }
 
     fn render(&self) {
-        let (t, env, busy) = (self.session.term(), self.session.env(), self.session.busy());
-        let db = self.local.borrow().db;
+        let t = self.session().term();
         if let Some(line) = self.line() {
-            line.set_inner_html(&Blocks::new(&env, true, db).html(&t));
+            Doc::fill(&line, &Blocks::new(&self.session().env(), true, self.db().get()).node(&t));
         }
         t.strip();
-        self.arcs();
-        self.local.borrow_mut().hot = None;
-        if !busy {
+        self.links();
+        *self.hot().borrow_mut() = None;
+        if !self.session().busy() {
             self.show_rule(None);
         }
         self.render_status();
@@ -150,62 +340,71 @@ impl Bench {
         self.set_controls();
     }
 
-    fn arcs(&self) {
+    fn links(&self) {
         if let (Some(stage), Some(line)) = (self.stage(), self.line()) {
-            Doc::arcs(&stage, &line, self.local.borrow().arcs);
+            Links::draw(&stage, &line, self.arcs().get());
         }
     }
 
     fn render_source(&self) {
-        let s = self.session.state();
-        if let Some(notes) = self.q(".rdx-notes") {
-            notes.set_inner_html(
-                &s.notes
-                    .iter()
-                    .map(|n| format!("<p><span class=\"rdx-dash\">--</span> {}</p>", Html::esc(n)))
-                    .collect::<Vec<String>>()
-                    .concat(),
+        let env = self.session().env();
+        if let Some(notes) = self.q(&Class::Notes.into()) {
+            Doc::fill(
+                &notes,
+                &Node::list(self.session().notes().iter().map(|n| {
+                    Node::el(Tag::P)
+                        .kid(Node::el(Tag::Span).class([Class::Dash]).kid(Node::text("--")))
+                        .kid(Node::text(format!(" {n}")))
+                })),
             );
         }
-        if let Some(defs) = self.q(".rdx-defs") {
-            Doc::hide(&defs, s.env.is_empty());
+        if let Some(defs) = self.q(&Class::Defs.into()) {
+            Doc::hide(&defs, env.is_empty());
         }
-        if let Some(list) = self.q(".rdx-defs-list") {
-            list.set_inner_html(
-                &s.env
-                    .iter()
-                    .map(|(n, b)| {
-                        format!(
-                            "<div class=\"rdx-def rdx-tm\"><span class=\"b b-const b-def\">{0}</span><span class=\"rk\">:=</span><span data-def=\"{0}\">{1}</span></div>",
-                            Html::esc(n),
-                            Blocks::new(&s.env, false, false).html(b)
-                        )
-                    })
-                    .collect::<Vec<String>>().concat(),
-            );
+        if let Some(list) = self.q(&Class::DefsList.into()) {
+            let defs = env.iter().map(|(n, b)| {
+                Node::el(Tag::Div)
+                    .class([Class::DefRow, Class::Tm])
+                    .kid(
+                        Node::el(Tag::Span)
+                            .class([Class::Block, Class::Const, Class::Def])
+                            .kid(Node::text(n)),
+                    )
+                    .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
+                    .kid(
+                        Node::el(Tag::Span)
+                            .attr(Attr::Def(n.clone()))
+                            .kid(Blocks::new(&env, false, false).node(b)),
+                    )
+            });
+            Doc::fill(&list, &Node::list(defs));
         }
-        if let Some(src) = self
-            .q(".rdx-src textarea")
-            .and_then(|e| e.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
-        {
-            src.set_value(&s.src);
+        if let Some(src) = self.source() {
+            src.set_value(&self.session().src());
         }
-        if let Some(err) = self.q(".rdx-err") {
+        if let Some(err) = self.q(&Class::Err.into()) {
             Doc::hide(&err, true);
         }
     }
 
     fn render_status(&self) {
-        let (t, env) = (self.session.term(), self.session.env());
+        let (t, env) = (self.session().term(), self.session().env());
         let rs = t.redexes(&env);
         let main = rs.iter().filter(|r| !r.kind().is_eta()).count();
         let head = match (main, Strategy::Whnf.next(&t, &env)) {
-            (0, _) => format!(
-                "<b class=\"rdx-nf\">Normal form</b>{}",
-                if rs.is_empty() { "" } else { " <span>except for η</span>" }
-            ),
-            (_, None) => "<b class=\"rdx-whnf\">Weak head normal form</b>".to_string(),
-            _ => format!("<b>{} redex{}</b>", rs.len(), if rs.len() > 1 { "es" } else { "" }),
+            (0, _) => Node::el(Tag::B)
+                .class([Class::NfLabel])
+                .kid(Node::text("Normal form"))
+                .kids(
+                    (!rs.is_empty())
+                        .then(|| Node::list([Node::text(" "), Node::el(Tag::Span).kid(Node::text("except for η"))])),
+                ),
+            (_, None) => Node::el(Tag::B)
+                .class([Class::WhnfLabel])
+                .kid(Node::text("Weak head normal form")),
+            _ => {
+                Node::el(Tag::B).kid(Node::text(format!("{} redex{}", rs.len(), if rs.len() > 1 { "es" } else { "" })))
+            }
         };
         let tally = rs.iter().fold(Vec::<(Kind, usize)>::new(), |mut tally, r| {
             match tally.iter_mut().find(|(k, _)| *k == r.kind()) {
@@ -214,72 +413,63 @@ impl Bench {
             }
             tally
         });
-        let marks = tally
-            .iter()
-            .map(|(k, n)| {
-                format!(
-                    "<span class=\"rdx-tally\">{}{}</span>",
-                    Doc::flat(Some(*k)),
-                    if *n > 1 { format!("×{n}") } else { String::new() }
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat();
-        let (idx, last) = {
-            let s = self.session.state();
-            (s.idx, s.hist.len() - 1)
-        };
-        let note = self.local.borrow().note.clone();
-        let html = format!(
-            "{head}{}<span class=\"rdx-stepno\">step {idx}{} · size {}</span>{}",
-            if marks.is_empty() {
-                String::new()
-            } else {
-                format!("<span class=\"rdx-tallies\">{marks}</span>")
-            },
-            if last > idx { format!(" of {last}") } else { String::new() },
-            t.size(),
-            if note.is_empty() {
-                String::new()
-            } else {
-                format!("<span class=\"rdx-note\">{}</span>", Html::esc(&note))
-            }
-        );
-        if let Some(status) = self.q(".rdx-status") {
-            status.set_inner_html(&html);
+        let marks = (!tally.is_empty()).then(|| {
+            Node::el(Tag::Span)
+                .class([Class::Tallies])
+                .kids(tally.iter().map(|(k, n)| {
+                    Node::el(Tag::Span)
+                        .class([Class::Tally])
+                        .kid(Letter::flat(Some(*k)))
+                        .kids((*n > 1).then(|| Node::text(format!("×{n}"))))
+                }))
+        });
+        let (idx, last) = (self.session().idx(), self.session().last());
+        let stepno =
+            format!("step {idx}{} · size {}", if last > idx { format!(" of {last}") } else { String::new() }, t.size());
+        let note = self
+            .note()
+            .borrow()
+            .clone()
+            .map(|n| Node::el(Tag::Span).class([Class::Note]).kid(Node::text(n)));
+        if let Some(status) = self.q(&Class::Status.into()) {
+            Doc::fill(
+                &status,
+                &Node::list([head])
+                    .kids(marks)
+                    .kid(Node::el(Tag::Span).class([Class::Stepno]).kid(Node::text(stepno)))
+                    .kids(note),
+            );
         }
     }
 
     fn render_trace(&self) {
         let Some(ol) = self
-            .q(".rdx-trace ol")
+            .q(&Selector::from(Class::Trace).within(Tag::Ol.into()))
             .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
         else {
             return;
         };
-        let idx = self.session.state().idx;
-        ol.set_inner_html(
-            &self
-                .session
-                .state()
-                .hist
-                .iter()
-                .enumerate()
-                .map(|(i, h)| {
-                    format!(
-                        "<li class=\"{}{}\"><button type=\"button\" data-i=\"{i}\"><span class=\"rdx-ti\">{i}</span>{}<code>{}</code>{}</button></li>",
-                        if i == idx { "cur" } else { "" },
-                        if i > idx { " fut" } else { "" },
-                        Doc::flat(h.kind),
-                        Html::esc(&h.term.text()),
-                        h.note.as_ref().map(|n| format!("<small>{}</small>", Html::esc(n))).unwrap_or_default()
-                    )
-                })
-                .collect::<Vec<String>>().concat(),
-        );
+        let idx = self.session().idx();
+        let rows = self.session().history().into_iter().enumerate().map(|(i, h)| {
+            let i = Step::new(i);
+            let place = match i.cmp(&idx) {
+                std::cmp::Ordering::Equal => vec![Class::Cur],
+                std::cmp::Ordering::Greater => vec![Class::Blank, Class::Fut],
+                std::cmp::Ordering::Less => vec![Class::Blank],
+            };
+            let button = Node::el(Tag::Button)
+                .attr(Attr::Button)
+                .attr(Attr::I(i))
+                .kid(Node::el(Tag::Span).class([Class::Ti]).kid(Node::text(i)))
+                .kid(Letter::flat(h.kind()))
+                .kid(Node::el(Tag::Code).kid(Node::text(h.term().text())))
+                .kids(h.note().map(|n| Node::el(Tag::Small).kid(Node::text(n))));
+            Node::el(Tag::Li).class(place).kid(button)
+        });
+        Doc::fill(&ol, &Node::list(rows));
         let Some(li) = ol
             .children()
-            .item(idx as u32)
+            .item(idx.get() as u32)
             .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
         else {
             return;
@@ -293,25 +483,24 @@ impl Bench {
     }
 
     fn render_capture(&self) {
-        let capture = self.session.state().capture.clone();
-        let Some(box_) = self.q(".rdx-capture") else { return };
-        Doc::hide(&box_, capture.is_none());
+        let capture = self.session().capture();
+        let Some(panel) = self.q(&Class::Capture.into()) else {
+            return;
+        };
+        Doc::hide(&panel, capture.is_none());
         let Some(capture) = capture else { return };
-        if let (Some(stage), Some(line)) = (Doc::q(&box_, ".rdx-stage"), Doc::q(&box_, ".rdx-line")) {
-            line.set_inner_html(&Blocks::new(&self.session.env(), false, false).html(&capture));
-            Doc::arcs(&stage, &line, true);
+        if let (Some(stage), Some(line)) = (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into())) {
+            Doc::fill(&line, &Blocks::new(&self.session().env(), false, false).node(&capture));
+            Links::draw(&stage, &line, true);
         }
     }
 
     fn set_controls(&self) {
-        let (t, env, busy) = (self.session.term(), self.session.env(), self.session.busy());
-        let (idx, len) = {
-            let s = self.session.state();
-            (s.idx, s.hist.len())
-        };
-        let running = self.local.borrow().running;
+        let (t, env, busy) = (self.session().term(), self.session().env(), self.session().busy());
+        let (idx, last) = (self.session().idx(), self.session().last());
+        let running = self.running().get();
         let (n, w) = (Strategy::Normal.next(&t, &env).is_some(), Strategy::Whnf.next(&t, &env).is_some());
-        let set = |act: &str, disabled: bool, label: Option<&str>| {
+        let set = |act: Act, disabled: bool, label: Option<&str>| {
             if let Some(b) = self.button(act) {
                 b.set_disabled(disabled);
                 if let Some(label) = label {
@@ -319,53 +508,44 @@ impl Bench {
                 }
             }
         };
-        set("step", busy || !n, None);
+        set(Act::Step, busy || !n, None);
         set(
-            "whnf",
+            Act::Whnf,
             if busy { running != Some(Mode::Whnf) } else { !w },
             Some(if running == Some(Mode::Whnf) { "Stop" } else { "To WHNF" }),
         );
         set(
-            "nf",
+            Act::Nf,
             if busy { running != Some(Mode::Nf) } else { !n },
             Some(if running == Some(Mode::Nf) { "Stop" } else { "Normalize" }),
         );
-        set("back", busy || idx == 0, None);
-        set("reset", busy || (idx == 0 && len == 1), None);
+        set(Act::Back, busy || idx == Step::START, None);
+        set(Act::Reset, busy || (idx == Step::START && last == Step::START), None);
     }
 
     fn matched(&self, path: &Path, kind: Kind) -> Match {
-        let t = self.session.term();
+        let t = self.session().term();
         let redex = t.at(path).cloned().expect("a redex inside the term");
         let schema = kind.schema(&redex);
-        let vars = schema.vars();
         let mut pieces = kind
             .bindings(&redex)
             .iter()
             .filter_map(|b| {
-                let slot = vars.iter().position(|v| *v == b.name()).map_or(0, |i| i + 1);
                 let owner = self.node(&path.join(b.rel()))?;
-                let piece = Piece {
-                    name: b.name(),
-                    slot,
-                    el: owner.clone(),
-                    uid: None,
-                    binder: None,
-                    text: None,
-                    external: false,
-                    rect: None,
-                    ghost: None,
-                };
+                let piece = Piece::new(b.var(), schema.slot(b.var()), owner.clone());
                 if b.is_binder() {
-                    let tab = Doc::q(&owner, ":scope > .bt > .rb").or_else(|| Doc::q(&owner, ":scope > .bt > .rk"))?;
+                    let tab = Doc::q(&owner, &Selector::Scope.child(Class::Tab.into()).child(Class::Binder.into()))
+                        .or_else(|| {
+                            Doc::q(&owner, &Selector::Scope.child(Class::Tab.into()).child(Class::Keyword.into()))
+                        })?;
                     Some(Piece {
                         el: tab,
-                        binder: Doc::attr(&owner, "data-binder"),
+                        binder: Doc::read(&owner, Data::Binder),
                         ..piece
                     })
                 } else {
                     Some(Piece {
-                        uid: Doc::attr(&owner, "data-uid"),
+                        uid: Doc::read(&owner, Data::Uid),
                         text: redex.at(b.rel()).map(Print::text),
                         ..piece
                     })
@@ -373,262 +553,246 @@ impl Bench {
             })
             .collect::<Vec<Piece>>();
         if kind == Kind::Delta {
-            let body = redex
-                .name()
-                .and_then(|n| self.q(&format!(".rdx-defs-list [data-def=\"{}\"] > .b", web_sys::css::escape(n))));
+            let body = redex.name().and_then(|n| {
+                self.q(&Selector::from(Class::DefsList)
+                    .within(Selector::is(Data::Def, n))
+                    .child(Class::Block.into()))
+            });
             if let Some(body) = body {
                 pieces.push(Piece {
-                    name: "c",
-                    slot: 1,
-                    uid: Doc::attr(&body, "data-uid"),
-                    el: body,
-                    binder: None,
-                    text: None,
+                    uid: Doc::read(&body, Data::Uid),
                     external: true,
-                    rect: None,
-                    ghost: None,
+                    ..Piece::new(Var::new("c"), Slot::ALL.first().copied(), body)
                 });
             }
         }
-        Match { schema, vars, pieces }
+        Match { schema, pieces }
     }
 
-    fn paint(&self, m: &Match, strength: &str) {
+    fn paint(&self, m: &Match, strength: Class) {
         self.unpaint();
         let line = self.line();
-        m.pieces.iter().filter(|pc| pc.slot > 0).for_each(|pc| {
-            let slot = format!("s{}", pc.slot);
-            Doc::add(&pc.el, &["mv", &slot, strength]);
-            if let (Some(b), Some(line)) = (&pc.binder, &line) {
-                Doc::all(line, &format!("[data-bid=\"{b}\"]"))
+        m.pieces().iter().for_each(|pc| {
+            let Some(slot) = pc.slot() else { return };
+            let classes = [Class::Moving, Class::Slot(slot), strength];
+            Doc::add(pc.el(), &classes);
+            if let (Some(b), Some(line)) = (pc.binder(), &line) {
+                Doc::all(line, &Selector::is(Data::Bid, &b))
                     .iter()
-                    .for_each(|v| Doc::add(v, &["mv", &slot, strength]));
+                    .for_each(|v| Doc::add(v, &classes));
             }
         });
     }
 
     fn unpaint(&self) {
         if let Some(root) = self.root() {
-            Doc::all(&root, ".mv")
+            let classes = [Class::Moving, Class::Soft, Class::Hard]
+                .into_iter()
+                .chain(Slot::ALL.map(Class::Slot))
+                .collect::<Vec<Class>>();
+            Doc::all(&root, &Class::Moving.into())
                 .iter()
-                .for_each(|e| Doc::remove(e, &["mv", "s1", "s2", "s3", "s4", "soft", "hard"]));
+                .for_each(|e| Doc::remove(e, &classes));
         }
     }
 
     fn show_rule(&self, hit: Option<(&Element, &Match)>) {
-        let Some(rule) = self.q(".rdx-rule") else { return };
+        let Some(card) = self.q(&Class::Rule.into()) else {
+            return;
+        };
         let Some((rx, m)) = hit else {
-            rule.set_inner_html(&format!("<p class=\"rdx-hint\">{}</p>", Self::HINT));
+            Doc::fill(&card, &Self::hint());
             return;
         };
-        let Some(kind) = Doc::attr(rx, "data-kind").and_then(|k| Kind::parse(&k)) else {
+        let Some(kind) = Doc::read::<Kind>(rx, Data::Kind) else {
             return;
         };
-        let schema = m
-            .schema
-            .parts()
-            .iter()
-            .map(|(var, s)| match var {
-                true => format!(
-                    "<span class=\"mv s{}\">{s}</span>",
-                    m.vars.iter().position(|v| v == s).map_or(0, |i| i + 1)
-                ),
-                false => (*s).to_string(),
-            })
-            .collect::<Vec<String>>()
-            .concat();
+        let mv =
+            |slot: Option<Slot>| Node::el(Tag::Span).class([Class::Moving].into_iter().chain(slot.map(Class::Slot)));
+        let schema = m.schema().parts().into_iter().map(|p| match p {
+            Part::Var(v) => mv(m.schema().slot(v)).kid(Node::text(v)),
+            Part::Text(s) => Node::text(s),
+        });
         let binds = m
-            .pieces
+            .pieces()
             .iter()
-            .filter(|pc| pc.slot > 0 && !pc.external)
+            .filter(|pc| pc.slot().is_some() && !pc.external())
             .map(|pc| {
-                let shown = if pc.binder.is_some() {
-                    pc.el.text_content().unwrap_or_default()
+                let shown = if pc.binder().is_some() {
+                    pc.el().text_content().unwrap_or_default()
                 } else {
-                    pc.text.clone().unwrap_or_default()
+                    pc.text().cloned().unwrap_or_default()
                 };
-                format!(
-                    "<span class=\"rdx-bind\"><span class=\"mv s{}\">{}</span> = <code>{}</code></span>",
-                    pc.slot,
-                    pc.name,
-                    Html::esc(&Self::short(&shown, 34))
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat();
-        rule.set_inner_html(&format!(
-            "<p class=\"rdx-schema\"><span class=\"rm flat k-{}\">{}</span><b>{}</b><code>{schema}</code></p><p class=\"rdx-binds\">{binds}</p>",
-            kind.class(),
-            kind.glyph(),
-            Self::rule_name(kind)
-        ));
+                Node::el(Tag::Span)
+                    .class([Class::Bind])
+                    .kid(mv(pc.slot()).kid(Node::text(pc.var())))
+                    .kid(Node::text(" = "))
+                    .kid(Node::el(Tag::Code).kid(Node::text(Self::short(&shown))))
+            });
+        Doc::fill(
+            &card,
+            &Node::list([
+                Node::el(Tag::P)
+                    .class([Class::Schema])
+                    .kid(Letter::flat(Some(kind)))
+                    .kid(Node::el(Tag::B).kid(Node::text(Self::rule(kind))))
+                    .kid(Node::el(Tag::Code).kids(schema)),
+                Node::el(Tag::P).class([Class::Binds]).kids(binds),
+            ]),
+        );
     }
 
     fn set_hot(&self, rx: Option<Element>) {
-        if self.local.borrow().hot == rx {
+        if *self.hot().borrow() == rx {
             return;
         }
-        if let Some(old) = self.local.borrow().hot.as_ref() {
-            Doc::remove(old, &["hot"]);
+        if let Some(old) = self.hot().borrow().as_ref() {
+            Doc::remove(old, &[Class::Hot]);
         }
-        self.local.borrow_mut().hot.clone_from(&rx);
+        self.hot().borrow_mut().clone_from(&rx);
         let Some(rx) = rx else {
             self.unpaint();
             self.show_rule(None);
             return;
         };
-        Doc::add(&rx, &["hot"]);
-        let (Some(path), Some(kind)) =
-            (Doc::attr(&rx, "data-path"), Doc::attr(&rx, "data-kind").and_then(|k| Kind::parse(&k)))
-        else {
+        Doc::add(&rx, &[Class::Hot]);
+        let (Some(path), Some(kind)) = (Doc::read::<Path>(&rx, Data::Path), Doc::read::<Kind>(&rx, Data::Kind)) else {
             return;
         };
-        let m = self.matched(&Path::from(path), kind);
-        self.paint(&m, "soft");
+        let m = self.matched(&path, kind);
+        self.paint(&m, Class::Soft);
         self.show_rule(Some((&rx, &m)));
     }
 
-    fn set_lit(&self, id: Option<String>) {
+    fn set_lit(&self, id: Option<Anchor>) {
         let Some(stage) = self.stage() else { return };
-        Doc::all(&stage, ".lit").iter().for_each(|e| Doc::remove(e, &["lit"]));
+        Doc::all(&stage, &Class::Lighted.into())
+            .iter()
+            .for_each(|e| Doc::remove(e, &[Class::Lighted]));
         if let Some(id) = id {
-            Doc::all(&stage, &format!("[data-id=\"{id}\"], [data-bid=\"{id}\"], .rb[data-anchor=\"{id}\"]"))
+            let sel = Selector::is(Data::Id, &id)
+                .or(Selector::is(Data::Bid, &id))
+                .or(Selector::from(Class::Binder).and(Selector::is(Data::Anchor, &id)));
+            Doc::all(&stage, &sel)
                 .iter()
-                .for_each(|e| Doc::add(e, &["lit"]));
+                .for_each(|e| Doc::add(e, &[Class::Lighted]));
         }
     }
 
     /// Before the step: pins the redex and its pieces over the page, and measures the layout.
     fn lift(&self, m: &Match, path: &Path) -> Lifted {
         let rx = self.node(path);
-        let mut pieces = m
-            .pieces
-            .iter()
-            .map(|pc| Piece {
-                rect: Some(pc.el.get_bounding_client_rect()),
-                ..pc.clone()
-            })
-            .collect::<Vec<Piece>>();
+        let pieces = m.pieces().iter().cloned().map(Piece::measured).collect::<Vec<Piece>>();
         pieces
             .iter()
             .enumerate()
-            .filter(|(_, pc)| pc.uid.is_some() && !pc.external)
-            .for_each(|(i, pc)| {
-                let _ = pc.el.set_attribute("data-piece", &i.to_string());
-            });
+            .filter(|(_, pc)| pc.travels())
+            .for_each(|(i, pc)| Doc::write(pc.el(), Data::Piece, &i));
         let husk = rx.and_then(|rx| Ghost::pin(&rx, None, false, &[]));
         if let Some(husk) = &husk {
-            Doc::all(husk, "[data-piece]")
+            Doc::all(husk, &Selector::Has(Data::Piece))
                 .iter()
                 .filter_map(|e| e.dyn_ref::<web_sys::HtmlElement>().cloned())
                 .for_each(|e| {
                     let _ = e.style().set_property("visibility", "hidden");
                 });
         }
-        pieces.iter_mut().for_each(|pc| {
-            let _ = pc.el.remove_attribute("data-piece");
-            if pc.uid.is_some() {
-                pc.ghost = Ghost::pin(&pc.el, None, false, &[]);
-            }
-        });
+        let pieces = pieces
+            .into_iter()
+            .map(|pc| {
+                Doc::erase(pc.el(), Data::Piece);
+                let ghost = pc.uid().and_then(|_| Ghost::pin(pc.el(), None, false, &[]));
+                pc.haunted(ghost)
+            })
+            .collect();
+        let layout = self
+            .line()
+            .map(|line| {
+                Doc::all(&line, &Selector::Has(Data::Uid))
+                    .iter()
+                    .filter_map(|e| Some((Doc::read::<Uid>(e, Data::Uid)?, e.get_bounding_client_rect())))
+                    .collect()
+            })
+            .unwrap_or_default();
         Lifted {
             husk,
             pieces,
-            layout: self.layout(),
+            stage: self.stage().as_ref().map(Element::get_bounding_client_rect),
+            layout,
         }
-    }
-
-    fn layout(&self) -> HashMap<String, DomRect> {
-        let mut rects = HashMap::new();
-        if let Some(stage) = self.stage() {
-            rects.insert("stage".to_string(), stage.get_bounding_client_rect());
-        }
-        if let Some(line) = self.line() {
-            Doc::all(&line, "[data-uid]").iter().for_each(|e| {
-                rects.insert(Doc::attr(e, "data-uid").unwrap_or_default(), e.get_bounding_client_rect());
-            });
-        }
-        rects
     }
 
     /// After the step: the composition that carries the old layout to the new one. The husk fades
     /// out, each piece flies to every node of the result built from it (or fades), the result fades
     /// in, and the context glides.
-    fn move_to(self: &Rc<Self>, lifted: Lifted, path: &Path) -> Motion {
+    fn move_to(self: &Rc<Self>, lifted: &Lifted, path: &Path) -> Motion {
         let Some(result) = self.node(path) else {
             return Motion::all(
                 lifted
-                    .husk
-                    .iter()
-                    .chain(lifted.pieces.iter().filter_map(|pc| pc.ghost.as_ref()))
+                    .husk()
+                    .into_iter()
+                    .chain(lifted.pieces().iter().filter_map(Piece::ghost))
                     .map(|g| Motion::exit(g, Tween::default()))
                     .collect(),
             );
         };
         let husk = lifted
-            .husk
-            .as_ref()
+            .husk()
             .map_or_else(Motion::none, |h| Motion::exit(h, Tween::default()));
         let enter = Motion::enter(&result, Tween::default());
         let travels = lifted
-            .pieces
+            .pieces()
             .iter()
             .map(|pc| Self::travel(pc, &result))
             .collect::<Vec<Option<Motion>>>();
-        let glide = self.glide(&lifted.layout, &result);
-        Motion::all(vec![husk, enter, Motion::stagger(50.0, travels), glide])
+        let glide = self.glide(lifted, &result);
+        Motion::all(vec![husk, enter, Motion::stagger(Self::PIECES, travels), glide])
     }
 
     fn travel(pc: &Piece, result: &Element) -> Option<Motion> {
-        let ghost = pc.ghost.clone()?;
-        let uid = pc.uid.clone().unwrap_or_default();
+        let ghost = pc.ghost()?.clone();
+        let uid = pc.uid();
         let hits = std::iter::once(result.clone())
-            .chain(Doc::all(result, "[data-uid], [data-from]"))
-            .filter(|e| {
-                Doc::attr(e, "data-uid").as_ref() == Some(&uid) || Doc::attr(e, "data-from").as_ref() == Some(&uid)
-            })
+            .chain(Doc::all(result, &Selector::Has(Data::Uid).or(Selector::Has(Data::From))))
+            .filter(|e| Doc::read::<Uid>(e, Data::Uid) == uid || Doc::read::<Uid>(e, Data::From) == uid)
             .collect::<Vec<Element>>();
         if hits.is_empty() {
-            return Some(if pc.external {
+            return Some(if pc.external() {
                 Motion::act(move || ghost.remove())
             } else {
                 Motion::exit(&ghost, Tween::default())
             });
         }
-        let rect = pc.rect.clone()?;
-        let slot = pc.slot;
-        Some(Motion::stagger(
-            40.0,
-            hits.iter()
-                .enumerate()
-                .map(|(j, tg)| {
-                    let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
-                    let mark = format!("s{slot}");
-                    let marks = if slot > 0 { vec!["mv", mark.as_str(), "hard"] } else { vec![] };
-                    let dst = Ghost::pin(tg, Some(&rect), true, &marks)?;
-                    let (dx, dy) = Ghost::delta(&rect, &tg.get_bounding_client_rect());
-                    Doc::add(tg, &["arriving"]);
-                    let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
-                    Some(Motion::seq(vec![
-                        Motion::all(vec![
-                            Motion::fly(&src, dx, dy, Tween::default()),
-                            Motion::fly(&dst, dx, dy, Tween::default()),
-                            Motion::crossfade(&src, &dst, Tween::default()),
-                        ]),
-                        Motion::act(move || {
-                            Doc::remove(&tg, &["arriving"]);
-                            if slot > 0 {
-                                Doc::add(&tg, &["landed", &format!("s{slot}")]);
-                            }
-                        }),
-                        Motion::act(move || {
-                            a.remove();
-                            b.remove();
-                        }),
-                    ]))
-                })
-                .collect(),
-        ))
+        let rect = pc.rect()?.clone();
+        let slot = pc.slot();
+        let copies = hits.iter().enumerate().map(|(j, tg)| {
+            let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
+            let marks = slot
+                .map(|s| vec![Class::Moving, Class::Slot(s), Class::Hard])
+                .unwrap_or_default();
+            let dst = Ghost::pin(tg, Some(&rect), true, &marks)?;
+            let (dx, dy) = Ghost::delta(&rect, &tg.get_bounding_client_rect());
+            Doc::add(tg, &[Class::Arriving]);
+            let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
+            Some(Motion::seq(vec![
+                Motion::all(vec![
+                    Motion::fly(&src, dx, dy, Tween::default()),
+                    Motion::fly(&dst, dx, dy, Tween::default()),
+                    Motion::crossfade(&src, &dst, Tween::default()),
+                ]),
+                Motion::act(move || {
+                    Doc::remove(&tg, &[Class::Arriving]);
+                    if let Some(s) = slot {
+                        Doc::add(&tg, &[Class::Landed, Class::Slot(s)]);
+                    }
+                }),
+                Motion::act(move || {
+                    a.remove();
+                    b.remove();
+                }),
+            ]))
+        });
+        Some(Motion::stagger(Self::COPIES, copies.collect()))
     }
 
     fn twin(g: &Element) -> Option<Element> {
@@ -644,12 +808,12 @@ impl Bench {
 
     /// Boxes that enclose the result change size, nodes beside it slide, new context fades in,
     /// and the stage resizes. Binding links step aside until the layout settles.
-    fn glide(self: &Rc<Self>, before: &HashMap<String, DomRect>, result: &Element) -> Motion {
+    fn glide(self: &Rc<Self>, lifted: &Lifted, result: &Element) -> Motion {
         let (Some(stage), Some(line)) = (self.stage(), self.line()) else {
             return Motion::none();
         };
-        let mut moves = before
-            .get("stage")
+        let mut moves = lifted
+            .stage()
             .map(|old| {
                 vec![Motion::resize(
                     &stage,
@@ -659,182 +823,183 @@ impl Bench {
                 )]
             })
             .unwrap_or_default();
-        Self::visit(&line, before, result, &mut moves);
+        Self::visit(&line, lifted.layout(), result, &mut moves);
         let (on, off, me) = (stage.clone(), stage, self.clone());
         Motion::seq(vec![
-            Motion::act(move || Doc::add(&on, &["moving"])),
+            Motion::act(move || Doc::add(&on, &[Class::Gliding])),
             Motion::all(moves),
             Motion::act(move || {
-                Doc::remove(&off, &["moving"]);
-                me.arcs();
+                Doc::remove(&off, &[Class::Gliding]);
+                me.links();
             }),
         ])
     }
 
-    fn visit(parent: &Element, before: &HashMap<String, DomRect>, result: &Element, moves: &mut Vec<Motion>) {
+    fn visit(parent: &Element, before: &HashMap<Uid, DomRect>, result: &Element, moves: &mut Vec<Motion>) {
         for c in Doc::children(parent) {
             if &c == result {
                 continue;
             }
-            let Some(uid) = Doc::attr(&c, "data-uid") else {
+            let Some(uid) = Doc::read::<Uid>(&c, Data::Uid) else {
                 Self::visit(&c, before, result, moves);
                 continue;
             };
             let (old, now) = (before.get(&uid), c.get_bounding_client_rect());
             if c.contains(Some(result)) {
-                if let Some(old) = old {
-                    moves.push(Motion::resize(&c, old, &now, Tween::default()));
-                }
+                moves.extend(old.map(|old| Motion::resize(&c, old, &now, Tween::default())));
                 Self::visit(&c, before, result, moves);
             } else {
-                match old {
-                    None => moves.push(Motion::enter(&c, Tween::default())),
-                    Some(old) => {
-                        moves.push(Motion::slide(&c, old.left() - now.left(), old.top() - now.top(), Tween::default()));
-                    }
-                }
+                moves.push(old.map_or_else(
+                    || Motion::enter(&c, Tween::default()),
+                    |old| {
+                        Motion::slide(
+                            &c,
+                            Px::new(old.left() - now.left()),
+                            Px::new(old.top() - now.top()),
+                            Tween::default(),
+                        )
+                    },
+                ));
             }
         }
     }
 
-    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, speed: f64) {
-        let t = self.session.term();
-        let redex = t.at(&path).cloned().expect("a redex inside the term");
-        let bound = match (kind, redex.shape()) {
-            (Kind::Beta, Shape::App(f, a)) => Some((f.clone(), a.clone())),
-            (Kind::Zeta, Shape::Let(_, v, _)) => Some((redex.clone(), v.clone())),
-            _ => None,
+    /// The α step that must come first when a β or ζ would capture: its term and its trace note.
+    fn rename_first(&self, t: &Term, path: &Path, kind: Kind) -> Option<(Term, Note)> {
+        let redex = t.at(path)?;
+        let (lam, arg) = match (kind, redex.shape()) {
+            (Kind::Beta, Shape::App(f, a)) => (f.clone(), a.clone()),
+            (Kind::Zeta, Shape::Let(_, v, _)) => (redex.clone(), v.clone()),
+            _ => return None,
         };
-        if let Some((lam, arg)) = bound {
-            let (x, b) = match lam.shape() {
-                Shape::Lam(x, b) | Shape::Let(x, _, b) => (x.clone(), b.clone()),
-                _ => unreachable!("β and ζ bind a name"),
-            };
-            let mut log = Vec::new();
-            let body = b.prepare(&x, &arg.fv(), &mut log);
-            if !log.is_empty() {
-                let naive = b.naive(&x, &arg);
-                self.session.update(|s| s.capture = Some(naive));
-                let renamed = match redex.shape() {
-                    Shape::Let(y, v, _) => Term::local(y, v.clone(), body),
-                    _ => Term::app(Term::lam(&x, body), arg),
-                };
-                let olds = log.iter().map(|(a, _)| a.clone()).collect::<Vec<String>>().join(", ");
-                let note = format!(
-                    "{}, so the argument’s free {olds} stays free",
-                    log.iter()
-                        .map(|(a, b)| format!("{a} → {b}"))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                );
-                self.session.push(Entry {
-                    term: t.replace(&path, renamed),
-                    kind: Some(Kind::Alpha),
-                    note: Some(note),
-                });
-                if Motion::enabled() {
-                    Motion::wait(Self::RENAME / speed).await;
-                }
+        let (Shape::Lam(x, b) | Shape::Let(x, _, b)) = lam.shape() else {
+            return None;
+        };
+        let mut log = Vec::new();
+        let body = b.prepare(x, &arg.fv(), &mut log);
+        if log.is_empty() {
+            return None;
+        }
+        self.session().set_capture(b.naive(x, &arg));
+        let renamed = match redex.shape() {
+            Shape::Let(y, v, _) => Term::local(y.clone(), v.clone(), body),
+            _ => Term::app(Term::lam(x.clone(), body), arg),
+        };
+        let olds = log
+            .iter()
+            .map(|(a, _)| a.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        let moves = log
+            .iter()
+            .map(|(a, b)| format!("{a} → {b}"))
+            .collect::<Vec<String>>()
+            .join(", ");
+        Some((
+            t.replace(path, renamed),
+            Note::from(format!("{moves}, so the argument’s free {olds} stays free").as_str()),
+        ))
+    }
+
+    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, clock: Clock) {
+        if let Some((renamed, note)) = self.rename_first(&self.session().term(), &path, kind) {
+            self.session().push(Entry::new(renamed, Some(Kind::Alpha), Some(note)));
+            if Motion::enabled() {
+                Motion::wait(clock.scale(Self::RENAME)).await;
             }
         }
         let mut lifted = None;
         if Motion::enabled() {
             let (rx, m) = (self.node(&path), self.matched(&path, kind));
-            self.local.borrow_mut().hot = None;
+            *self.hot().borrow_mut() = None;
             if let Some(rx) = &rx {
-                Doc::add(rx, &["firing"]);
+                Doc::add(rx, &[Class::Firing]);
             }
             self.show_rule(rx.as_ref().map(|rx| (rx, &m)));
-            self.paint(&m, "hard");
-            Motion::wait(Self::HOLD / speed).await;
+            self.paint(&m, Class::Hard);
+            Motion::wait(clock.scale(Self::HOLD)).await;
             lifted = Some(self.lift(&m, &path));
         }
-        let now = self.session.term();
-        let env = self.session.env();
+        let (now, env) = (self.session().term(), self.session().env());
         let next = now.replace(&path, now.at(&path).expect("a redex inside the term").contract(kind, &env));
-        self.session.push(Entry {
-            term: next,
-            kind: Some(kind),
-            note: None,
-        });
+        self.session().push(Entry::new(next, Some(kind), None));
         if let Some(lifted) = lifted {
-            self.move_to(lifted, &path).play(Clock::new(speed)).await;
+            self.move_to(&lifted, &path).play(clock).await;
         }
     }
 
     async fn fire_once(self: Rc<Self>, path: Path, kind: Kind) {
-        if self.session.busy() {
+        if self.session().busy() {
             return;
         }
-        self.session.update(|s| s.busy = true);
-        self.local.borrow_mut().note.clear();
+        self.session().set_busy(true);
+        *self.note().borrow_mut() = None;
         self.set_controls();
-        self.clone().fire_at(path, kind, 1.0).await;
-        self.session.update(|s| s.busy = false);
+        self.clone().fire_at(path, kind, Clock::default()).await;
+        self.session().set_busy(false);
         self.unpaint();
         self.show_rule(None);
         self.set_controls();
     }
 
+    /// The speed of a run's `n`th step: the first few at reading pace, then faster.
+    fn pace(mode: Mode, n: Step) -> Clock {
+        match (mode, n.get()) {
+            (Mode::Step, _) => Clock::default(),
+            (_, 0..3) => Clock::new(1.3),
+            (_, 3..12) => Clock::new(2.2),
+            _ => Clock::new(4.5),
+        }
+    }
+
     async fn run(self: Rc<Self>, mode: Mode) {
-        if self.session.busy() {
-            if self.local.borrow().running == Some(mode) {
-                self.local.borrow_mut().stop = true;
+        if self.session().busy() {
+            if self.running().get() == Some(mode) {
+                self.stop().set(true);
             }
             return;
         }
-        self.session.update(|s| s.busy = true);
-        {
-            let mut w = self.local.borrow_mut();
-            w.running = if mode == Mode::Step { None } else { Some(mode) };
-            w.stop = false;
-            w.note.clear();
-        }
+        self.session().set_busy(true);
+        self.running().set(if mode == Mode::Step { None } else { Some(mode) });
+        self.stop().set(false);
+        *self.note().borrow_mut() = None;
         self.set_controls();
-        let mut seen = {
-            let s = self.session.state();
-            s.hist[..=s.idx]
-                .iter()
-                .map(|h| h.term.key())
-                .collect::<HashSet<String>>()
-        };
-        let (mut n, mut msg) = (0, "");
-        while !self.local.borrow().stop {
-            let (t, env) = (self.session.term(), self.session.env());
+        let mut seen = self
+            .session()
+            .history()
+            .iter()
+            .take(self.session().idx().get() + 1)
+            .map(|h| h.term().key())
+            .collect::<HashSet<Key>>();
+        let (mut n, mut msg) = (Step::START, None);
+        while !self.stop().get() {
+            let (t, env) = (self.session().term(), self.session().env());
             let Some(r) = (if mode == Mode::Whnf { Strategy::Whnf } else { Strategy::Normal }).next(&t, &env) else {
                 break;
             };
-            let speed = match (mode, n) {
-                (Mode::Step, _) => 1.0,
-                (_, 0..3) => 1.3,
-                (_, 3..12) => 2.2,
-                _ => 4.5,
-            };
-            self.clone().fire_at(r.path().clone(), r.kind(), speed).await;
-            n += 1;
+            self.clone()
+                .fire_at(r.path().clone(), r.kind(), Self::pace(mode, n))
+                .await;
+            n = n.next();
             if mode == Mode::Step {
                 break;
             }
-            let term = self.session.term();
-            if !seen.insert(term.key()) {
-                msg = "Stopped: this term came back to one it already passed through. It loops.";
-                break;
-            }
-            if n >= 200 {
-                msg = "Stopped after 200 steps.";
-                break;
-            }
-            if term.size() > 2000 {
-                msg = "Stopped: the term grew past 2000 nodes.";
+            let term = self.session().term();
+            msg = match () {
+                () if !seen.insert(term.key()) => {
+                    Some("Stopped: this term came back to one it already passed through. It loops.")
+                }
+                () if n >= Self::STEPS => Some("Stopped after 200 steps."),
+                () if term.size() > Self::LARGE => Some("Stopped: the term grew past 2000 nodes."),
+                () => None,
+            };
+            if msg.is_some() {
                 break;
             }
         }
-        self.session.update(|s| s.busy = false);
-        {
-            let mut w = self.local.borrow_mut();
-            w.running = None;
-            w.note = msg.to_string();
-        }
+        self.session().set_busy(false);
+        self.running().set(None);
+        *self.note().borrow_mut() = msg.map(Note::from);
         self.unpaint();
         self.show_rule(None);
         self.render_status();
@@ -842,75 +1007,72 @@ impl Bench {
     }
 
     fn rename(&self, path: &Path) {
-        if self.session.busy() || self.local.borrow().db {
+        if self.session().busy() || self.db().get() {
             return;
         }
-        let t = self.session.term();
+        let t = self.session().term();
         let Some(n) = t.at(path).cloned() else { return };
-        let (Some(x), Some(b)) = (n.binder().map(String::from), n.kid('b').cloned()) else {
+        let (Some(x), Some(b)) = (n.binder().cloned(), n.kid('b').cloned()) else {
             return;
         };
-        let avoid = b.names().into_iter().chain([x.clone()]).collect::<HashSet<String>>();
-        let len = Self::NAMES.len() as isize;
-        let i = Self::NAMES
-            .iter()
-            .position(|c| *c == Name::strip(&x))
-            .map_or(-1, |i| i as isize);
-        let y = (1..=len)
-            .map(|j| Self::NAMES[((i + j) % len) as usize])
+        let avoid = b.names().into_iter().chain([x.clone()]).collect::<HashSet<Name>>();
+        let names = Self::NAMES.map(Name::from);
+        let start = names.iter().position(|c| *c == x.stem()).map_or(0, |i| i + 1);
+        let y = (0..names.len())
+            .map(|j| &names[(start + j) % names.len()])
             .find(|c| !avoid.contains(*c) && !Consts::has(c))
-            .map_or_else(|| Name::fresh(&x, &avoid), String::from);
-        let body = b.subst(&x, &Term::var(&y), &HashSet::from([y.clone()]), Some(Mark::Renamed));
+            .cloned()
+            .unwrap_or_else(|| x.fresh(&avoid));
+        let body = b.subst(&x, &Term::var(y.clone()), &HashSet::from([y.clone()]), Some(Mark::Renamed));
         let m = match n.shape() {
-            Shape::Let(_, v, _) => Term::local(&y, v.clone(), body),
-            _ => Term::lam(&y, body),
+            Shape::Let(_, v, _) => Term::local(y.clone(), v.clone(), body),
+            _ => Term::lam(y.clone(), body),
         }
         .marked(Mark::Binder);
-        self.local.borrow_mut().note.clear();
-        self.session.push(Entry {
-            term: t.replace(path, m),
-            kind: Some(Kind::Alpha),
-            note: Some(format!("{x} → {y}")),
-        });
+        *self.note().borrow_mut() = None;
+        self.session().push(Entry::new(
+            t.replace(path, m),
+            Some(Kind::Alpha),
+            Some(Note::from(format!("{x} → {y}").as_str())),
+        ));
     }
 
     fn back(&self) {
-        let idx = self.session.state().idx;
-        if !self.session.busy() && idx > 0 {
-            self.local.borrow_mut().note.clear();
-            self.session.seek(idx - 1);
+        let idx = self.session().idx();
+        if let Some(prev) = idx.back().filter(|_| !self.session().busy()) {
+            *self.note().borrow_mut() = None;
+            self.session().seek(prev);
         }
     }
 
-    fn act(self: &Rc<Self>, act: &str) {
+    fn act(self: &Rc<Self>, act: Act) {
         match act {
-            "step" => leptos::task::spawn_local(self.clone().run(Mode::Step)),
-            "whnf" => leptos::task::spawn_local(self.clone().run(Mode::Whnf)),
-            "nf" => leptos::task::spawn_local(self.clone().run(Mode::Nf)),
-            "back" => self.back(),
-            "reset" if !self.session.busy() => {
-                self.local.borrow_mut().note.clear();
-                self.session.reset();
+            Act::Step => leptos::task::spawn_local(self.clone().run(Mode::Step)),
+            Act::Whnf => leptos::task::spawn_local(self.clone().run(Mode::Whnf)),
+            Act::Nf => leptos::task::spawn_local(self.clone().run(Mode::Nf)),
+            Act::Back => self.back(),
+            Act::Reset if !self.session().busy() => {
+                *self.note().borrow_mut() = None;
+                self.session().reset();
             }
-            "load" if !self.session.busy() => self.load(),
+            Act::Load if !self.session().busy() => self.load(),
             _ => {}
         }
     }
 
     fn load(&self) {
         let src = self
-            .q(".rdx-src textarea")
-            .and_then(|e| e.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
-            .map(|t| t.value())
+            .source()
+            .as_ref()
+            .map(web_sys::HtmlTextAreaElement::value)
             .unwrap_or_default();
-        let eta = self.session.state().eta;
-        if let Err(e) = self.session.load(&src, None, eta) {
-            if let Some(err) = self.q(".rdx-err") {
-                err.set_text_content(Some(&e));
+        if let Err(e) = self.session().load(&src, None, self.session().eta()) {
+            if let Some(err) = self.q(&Class::Err.into()) {
+                err.set_text_content(Some(&e.to_string()));
                 Doc::hide(&err, false);
             }
             if let Some(details) = self
-                .q(".rdx-src")
+                .q(&Class::Src.into())
                 .and_then(|e| e.dyn_into::<web_sys::HtmlDetailsElement>().ok())
             {
                 details.set_open(true);
@@ -919,71 +1081,96 @@ impl Bench {
     }
 
     fn over(&self, e: &web_sys::Event) {
-        if self.session.busy() {
+        if self.session().busy() {
             return;
         }
         let Some(target) = Doc::target(e) else { return };
-        self.set_hot(Doc::closest(&target, ".rr"));
-        let b = Doc::closest(&target, "[data-bid], .rb");
-        self.set_lit(b.and_then(|b| {
-            Doc::attr(&b, "data-bid")
-                .filter(|s| !s.is_empty())
-                .or_else(|| Doc::attr(&b, "data-anchor"))
-        }));
+        self.set_hot(Doc::closest(&target, &Class::Rr.into()));
+        let b = Doc::closest(&target, &Selector::Has(Data::Bid).or(Class::Binder.into()));
+        self.set_lit(
+            b.and_then(|b| Doc::read::<Anchor>(&b, Data::Bid).or_else(|| Doc::read::<Anchor>(&b, Data::Anchor))),
+        );
+    }
+
+    fn leave(&self) {
+        if !self.session().busy() {
+            self.set_hot(None);
+            self.set_lit(None);
+        }
+    }
+
+    fn focus(&self, e: &web_sys::Event) {
+        let rx = Doc::target(e).and_then(|t| Doc::closest(&t, &Class::Rr.into()));
+        if rx.is_some() && !self.session().busy() {
+            self.set_hot(rx);
+        }
     }
 
     fn click(self: &Rc<Self>, e: &web_sys::Event) {
-        if self.session.busy() {
+        if self.session().busy() {
             return;
         }
         let Some(target) = Doc::target(e) else { return };
-        if let Some(bn) = Doc::closest(&target, ".rb").filter(|b| b.tag_name() == "BUTTON") {
-            self.rename(&Path::from(Doc::attr(&bn, "data-path").unwrap_or_default()));
+        if let Some(bn) = Doc::closest(&target, &Class::Binder.into()).filter(|b| b.tag_name() == "BUTTON") {
+            if let Some(p) = Doc::read::<Path>(&bn, Data::Path) {
+                self.rename(&p);
+            }
             return;
         }
-        if let Some(rx) = Doc::closest(&target, ".rr") {
-            let (path, kind) = (
-                Doc::attr(&rx, "data-path").unwrap_or_default(),
-                Doc::attr(&rx, "data-kind").and_then(|k| Kind::parse(&k)),
-            );
-            if let Some(kind) = kind {
-                leptos::task::spawn_local(self.clone().fire_once(Path::from(path), kind));
-            }
+        if let Some(rx) = Doc::closest(&target, &Class::Rr.into())
+            && let (Some(path), Some(kind)) = (Doc::read::<Path>(&rx, Data::Path), Doc::read::<Kind>(&rx, Data::Kind))
+        {
+            leptos::task::spawn_local(self.clone().fire_once(path, kind));
         }
     }
 
+    fn pick(&self, e: &web_sys::Event) {
+        let row =
+            Doc::target(e).and_then(|t| Doc::closest(&t, &Selector::from(Class::Trace).within(Selector::Has(Data::I))));
+        if let Some(i) = row.and_then(|r| Doc::read::<Step>(&r, Data::I))
+            && !self.session().busy()
+        {
+            *self.note().borrow_mut() = None;
+            self.session().seek(i);
+        }
+    }
+
+    fn toggle(&self, e: &web_sys::Event, opt: Opt) {
+        let on = Doc::target(e)
+            .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+            .as_ref()
+            .is_some_and(web_sys::HtmlInputElement::checked);
+        match opt {
+            Opt::Arcs => self.arcs().set(on),
+            Opt::Db => self.db().set(on),
+            Opt::Eta => {}
+        }
+        self.render();
+    }
+
     fn key(self: &Rc<Self>, e: &web_sys::KeyboardEvent) {
-        let typing = Doc::target(e).is_some_and(|t| Doc::closest(&t, "textarea, input, select").is_some());
+        let typing = Doc::target(e).is_some_and(|t| {
+            Doc::closest(
+                &t,
+                &Selector::from(Tag::Textarea)
+                    .or(Tag::Input.into())
+                    .or(Tag::Select.into()),
+            )
+            .is_some()
+        });
         if e.meta_key() || e.ctrl_key() || e.alt_key() || typing {
             return;
         }
         let (busy, t, env, idx) =
-            (self.session.busy(), self.session.term(), self.session.env(), self.session.state().idx);
+            (self.session().busy(), self.session().term(), self.session().env(), self.session().idx());
         if e.key() == "ArrowRight" && !busy && Strategy::Normal.next(&t, &env).is_some() {
             e.prevent_default();
             leptos::task::spawn_local(self.clone().run(Mode::Step));
         }
-        if e.key() == "ArrowLeft" && !busy && idx > 0 {
+        if e.key() == "ArrowLeft" && !busy && idx > Step::START {
             e.prevent_default();
             self.back();
         }
-    }
-
-    /// Redraws the binding links on the next frame, after a resize or once the fonts load.
-    fn redraw(self: &Rc<Self>) {
-        let Some(window) = web_sys::window() else { return };
-        let _ = window.cancel_animation_frame(self.local.borrow().raf);
-        let me = self.clone();
-        let frame = Closure::once_into_js(move || {
-            me.arcs();
-            if me.session.state().capture.is_some()
-                && let Some(box_) = me.q(".rdx-capture")
-                && let (Some(stage), Some(line)) = (Doc::q(&box_, ".rdx-stage"), Doc::q(&box_, ".rdx-line"))
-            {
-                Doc::arcs(&stage, &line, true);
-            }
-        });
-        self.local.borrow_mut().raf = window.request_animation_frame(frame.unchecked_ref()).unwrap_or(0);
     }
 
     /// Scrolls the workbench to the top of the window.
@@ -1000,23 +1187,40 @@ impl Bench {
         }
     }
 
-    /// Listeners that outlive the view: the session, the keyboard, resizes and fonts.
+    /// Redraws the binding links on the next frame, after a resize or once the fonts load.
+    fn redraw(self: &Rc<Self>) {
+        let Some(window) = web_sys::window() else { return };
+        let _ = window.cancel_animation_frame(self.raf().get());
+        let me = self.clone();
+        let frame = Closure::once_into_js(move || {
+            me.links();
+            if me.session().capture().is_some()
+                && let Some(panel) = me.q(&Class::Capture.into())
+                && let (Some(stage), Some(line)) =
+                    (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into()))
+            {
+                Links::draw(&stage, &line, true);
+            }
+        });
+        self.raf()
+            .set(window.request_animation_frame(frame.unchecked_ref()).unwrap_or(0));
+    }
+
+    /// Listeners that outlive the view: the session, the keyboard, and the fonts.
     fn listen(self: &Rc<Self>) {
         let me = self.clone();
-        self.session.on(move |e| {
-            if e == Event::Reveal {
-                me.reveal();
-                return;
-            }
-            if e == Event::Load {
-                me.local.borrow_mut().note.clear();
+        self.session().on(move |e| match e {
+            Event::Reveal => me.reveal(),
+            Event::Load => {
+                *me.note().borrow_mut() = None;
                 me.render_source();
+                me.render();
             }
-            me.render();
+            Event::Step => me.render(),
         });
         let me = self.clone();
         let keys = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| me.key(&e));
-        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+        if let Some(doc) = web_sys::window().as_ref().and_then(web_sys::Window::document) {
             let _ = doc.add_event_listener_with_callback("keydown", keys.as_ref().unchecked_ref());
             let me = self.clone();
             let ready = Closure::<dyn FnMut(JsValue)>::new(move |_| me.redraw());
@@ -1032,10 +1236,9 @@ impl Bench {
     fn observe(self: &Rc<Self>) {
         let me = self.clone();
         let resized = Closure::<dyn Fn(JsValue)>::new(move |_| me.redraw());
-        if let (Ok(observer), Some(parent)) = (
-            web_sys::ResizeObserver::new(resized.as_ref().unchecked_ref()),
-            self.stage().and_then(|s| s.parent_element()),
-        ) {
+        if let (Ok(observer), Some(parent)) =
+            (web_sys::ResizeObserver::new(resized.as_ref().unchecked_ref()), Doc::above(self.stage()))
+        {
             observer.observe(&parent);
         }
         resized.forget();
@@ -1049,134 +1252,102 @@ pub fn Workbench() -> impl IntoView {
     let bench = Rc::new(Bench {
         session,
         anchor,
-        local: RefCell::new(Local {
-            arcs: true,
-            ..Local::default()
-        }),
+        arcs: Cell::new(true),
+        db: Cell::new(false),
+        hot: RefCell::new(None),
+        running: Cell::new(None),
+        stop: Cell::new(false),
+        note: RefCell::new(None),
+        raf: Cell::new(0),
     });
     bench.listen();
-    let mounted = bench.clone();
-    anchor.on_load(move |_| mounted.observe());
-    let (b1, b2, b3, b4, b5, b6, b7, b8) = (
-        bench.clone(),
-        bench.clone(),
-        bench.clone(),
-        bench.clone(),
-        bench.clone(),
-        bench.clone(),
-        bench.clone(),
-        bench,
-    );
-    let act = move |name: &'static str| {
+    let [b0, b1, b2, b3, b4, b5, b6, b7, b8] = std::array::from_fn(|_| bench.clone());
+    anchor.on_load(move |_| b0.observe());
+    let act = move |a: Act| {
         let b = b7.clone();
-        move |_: web_sys::MouseEvent| b.act(name)
+        move |_: web_sys::MouseEvent| b.act(a)
     };
-    let opt = move |arcs: bool| {
+    let opt = move |o: Opt| {
         let b = b8.clone();
-        move |e: web_sys::Event| {
-            let on = Doc::target(&e)
-                .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                .is_some_and(|i| i.checked());
-            if arcs {
-                b.local.borrow_mut().arcs = on;
-            } else {
-                b.local.borrow_mut().db = on;
-            }
-            b.render();
-        }
+        move |e: web_sys::Event| b.toggle(&e, o)
     };
+    let cls = |cs: &[Class]| Attr::Class(cs.to_vec()).to_string();
     view! {
-        <div class="rdx-notes" node_ref=anchor></div>
-        <div class="rdx-rule" aria-live="polite"></div>
-        <div class="rdx-scroll">
-            <div class="rdx-stage">
-                <svg class="rdx-arcs" aria-hidden="true"></svg>
+        <div class=Class::Notes.to_string() node_ref=anchor></div>
+        <div class=Class::Rule.to_string() aria-live="polite"></div>
+        <div class=Class::Scroll.to_string()>
+            <div class=Class::Stage.to_string()>
+                <svg class=Class::Arcs.to_string() aria-hidden="true"></svg>
                 <div
-                    class="rdx-line rdx-tm"
+                    class=cls(&[Class::Line, Class::Tm])
                     on:mouseover=move |e| b1.over(&e)
-                    on:mouseleave=move |_| {
-                        if !b2.session.busy() {
-                            b2.set_hot(None);
-                            b2.set_lit(None);
-                        }
-                    }
-                    on:focusin=move |e| {
-                        let rx = Doc::target(&e).and_then(|t| Doc::closest(&t, ".rr"));
-                        if rx.is_some() && !b3.session.busy() {
-                            b3.set_hot(rx);
-                        }
-                    }
+                    on:mouseleave=move |_| b2.leave()
+                    on:focusin=move |e| b3.focus(&e)
                     on:click=move |e| b4.click(&e)
                 ></div>
             </div>
         </div>
-        <div class="rdx-status"></div>
-        <div class="rdx-controls">
-            <button type="button" class="rdx-btn primary" data-act="step" on:click=act("step")>
+        <div class=Class::Status.to_string()></div>
+        <div class=Class::Controls.to_string()>
+            <button type="button" class=cls(&[Class::Btn, Class::Primary]) data-act=Act::Step.to_string() on:click=act(Act::Step)>
                 "Step"
             </button>
-            <button type="button" class="rdx-btn" data-act="whnf" on:click=act("whnf")>
+            <button type="button" class=Class::Btn.to_string() data-act=Act::Whnf.to_string() on:click=act(Act::Whnf)>
                 "To WHNF"
             </button>
-            <button type="button" class="rdx-btn" data-act="nf" on:click=act("nf")>
+            <button type="button" class=Class::Btn.to_string() data-act=Act::Nf.to_string() on:click=act(Act::Nf)>
                 "Normalize"
             </button>
-            <button type="button" class="rdx-btn" data-act="back" on:click=act("back")>
+            <button type="button" class=Class::Btn.to_string() data-act=Act::Back.to_string() on:click=act(Act::Back)>
                 "Back"
             </button>
-            <button type="button" class="rdx-btn" data-act="reset" on:click=act("reset")>
+            <button type="button" class=Class::Btn.to_string() data-act=Act::Reset.to_string() on:click=act(Act::Reset)>
                 "Reset"
             </button>
-            <span class="rdx-grow"></span>
-            <label class="rdx-toggle">
-                <input type="checkbox" data-opt="arcs" checked on:change=opt(true)/>
+            <span class=Class::Grow.to_string()></span>
+            <label class=Class::Toggle.to_string()>
+                <input type="checkbox" data-opt=Opt::Arcs.to_string() checked on:change=opt(Opt::Arcs)/>
                 " Binding links"
             </label>
-            <label class="rdx-toggle">
-                <input type="checkbox" data-opt="db" on:change=opt(false)/>
+            <label class=Class::Toggle.to_string()>
+                <input type="checkbox" data-opt=Opt::Db.to_string() on:change=opt(Opt::Db)/>
                 " de Bruijn"
             </label>
         </div>
-        <div class="rdx-capture" hidden>
+        <div class=Class::Capture.to_string() hidden>
             <p>
                 <b>"Why α fired first."</b>
                 " Without renaming, substitution gives the term below. The dashed link is the argument’s free variable, caught by an inner binder, which changes what the term means."
             </p>
-            <div class="rdx-scroll">
-                <div class="rdx-stage small">
-                    <svg class="rdx-arcs" aria-hidden="true"></svg>
-                    <div class="rdx-line rdx-tm"></div>
+            <div class=Class::Scroll.to_string()>
+                <div class=cls(&[Class::Stage, Class::Small])>
+                    <svg class=Class::Arcs.to_string() aria-hidden="true"></svg>
+                    <div class=cls(&[Class::Line, Class::Tm])></div>
                 </div>
             </div>
         </div>
-        <div class="rdx-defs" hidden>
-            <div class="rdx-label">"Definitions " <span>"· δ unfolds these"</span></div>
-            <div class="rdx-defs-list"></div>
+        <div class=Class::Defs.to_string() hidden>
+            <div class=Class::Label.to_string()>"Definitions " <span>"· δ unfolds these"</span></div>
+            <div class=Class::DefsList.to_string()></div>
         </div>
-        <details class="rdx-trace" open>
+        <details class=Class::Trace.to_string() open>
             <summary>"Trace"</summary>
-            <ol on:click=move |e| {
-                let row = Doc::target(&e).and_then(|t| Doc::closest(&t, ".rdx-trace [data-i]"));
-                if let Some(i) = row.and_then(|r| Doc::attr(&r, "data-i")).and_then(|i| i.parse::<usize>().ok()) && !b5.session.busy() {
-                    b5.local.borrow_mut().note.clear();
-                    b5.session.seek(i);
-                }
-            }></ol>
+            <ol on:click=move |e| b5.pick(&e)></ol>
         </details>
-        <details class="rdx-src">
+        <details class=Class::Src.to_string()>
             <summary>"Edit source"</summary>
             <textarea spellcheck="false" rows="5" aria-label="Program source"></textarea>
-            <div class="rdx-src-row">
-                <button type="button" class="rdx-btn primary" data-act="load" on:click=move |_| b6.act("load")>
+            <div class=Class::SrcRow.to_string()>
+                <button type="button" class=cls(&[Class::Btn, Class::Primary]) data-act=Act::Load.to_string() on:click=move |_| b6.act(Act::Load)>
                     "Load"
                 </button>
-                <p class="rdx-syntax">
+                <p class=Class::Syntax.to_string()>
                     <code>"λx. t"</code> " or " <code>"fun x => t"</code> " · " <code>"let x := v; t"</code> " · "
                     <code>"(a, b)"</code> " · " <code>"p.1"</code> " · " <code>"Nat.rec z s n"</code> " · numerals · "
                     <code>"def name := t"</code> " on its own line · " <code>"--"</code> " comments"
                 </p>
             </div>
-            <p class="rdx-err" hidden></p>
+            <p class=Class::Err.to_string() hidden></p>
         </details>
     }
 }

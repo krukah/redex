@@ -6,62 +6,34 @@ use explore::*;
 use layout::*;
 use leptos::html;
 use leptos::prelude::*;
+use markup::Selector;
+use markup::*;
 use motion::*;
 use rules::*;
 use strategy::*;
 use syntax::*;
+use term::Env;
 use term::*;
+use units::*;
 use wasm_bindgen::JsCast;
 use web_sys::Element;
 
 use crate::*;
-
-/// A strategy route the graph can draw, or none.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Route {
-    id: &'static str,
-    label: &'static str,
-    strategy: Option<Strategy>,
-}
-
-impl Route {
-    pub const ALL: [Route; 4] = [
-        Self {
-            id: "none",
-            label: "None",
-            strategy: None,
-        },
-        Self {
-            id: "normal",
-            label: "Normal order",
-            strategy: Some(Strategy::Normal),
-        },
-        Self {
-            id: "applicative",
-            label: "Applicative order",
-            strategy: Some(Strategy::Applicative),
-        },
-        Self {
-            id: "whnf",
-            label: "Head only",
-            strategy: Some(Strategy::Whnf),
-        },
-    ];
-}
 
 /// The reduction graph, explored and laid out, and the markup the graph widget draws from it. Rows
 /// are steps from the start; a mark's shape is its form; edges carry rule ink; a route is a band.
 pub struct Chart {
     graph: Graph,
     plot: Plot,
-    env: term::Env,
-    uid: String,
-    labels: Vec<String>,
+    env: Env,
+    plate: Plate,
 }
 
 impl Chart {
     /// Stop exploring after this many terms.
-    pub const CAP: usize = 70;
+    pub const CAP: Cap = Cap::new(70);
+    /// A route follows a strategy this far.
+    const ROUTE: Cap = Cap::new(40);
     const KINDS: [Kind; 7] = [
         Kind::Alpha,
         Kind::Beta,
@@ -71,17 +43,21 @@ impl Chart {
         Kind::Iota,
         Kind::Proj,
     ];
+    pub const ROUTES: [Option<Strategy>; 4] = [
+        None,
+        Some(Strategy::Normal),
+        Some(Strategy::Applicative),
+        Some(Strategy::Whnf),
+    ];
 
-    pub fn new(start: &Term, env: &term::Env, eta: bool, uid: &str) -> Self {
+    pub fn new(start: &Term, env: &Env, eta: bool, plate: Plate) -> Self {
         let graph = Graph::explore(start, env, eta, Self::CAP);
         let plot = Plot::new(&graph, env);
-        let labels = graph.vertices().iter().map(|v| v.term().text()).collect();
         Self {
             graph,
             plot,
             env: env.clone(),
-            uid: uid.to_string(),
-            labels,
+            plate,
         }
     }
 
@@ -93,109 +69,159 @@ impl Chart {
         &self.plot
     }
 
-    fn n(x: f64) -> String {
-        Number::show(x)
+    pub fn svg(&self, sel: Option<Id>) -> Node {
+        let js = Num::Js;
+        let px = Px::new;
+        let grid = self.plot.rows().map(|d| {
+            let y = Plot::row(d);
+            Node::list([
+                Node::el(Tag::Line)
+                    .class([Class::Gridline])
+                    .attr(Attr::X1(js(Plot::ML - px(18.0))))
+                    .attr(Attr::X2(js(self.plot.width() - px(12.0))))
+                    .attr(Attr::Y1(js(y)))
+                    .attr(Attr::Y2(js(y))),
+                Node::el(Tag::Text)
+                    .class([Class::Ax])
+                    .attr(Attr::X(js(Plot::ML - px(26.0))))
+                    .attr(Attr::Y(js(y)))
+                    .kid(Node::text(d)),
+            ])
+        });
+        let head = Node::el(Tag::Text)
+            .class([Class::Ax, Class::Head])
+            .attr(Attr::X(js(Plot::ML - px(26.0))))
+            .attr(Attr::Y(js(Plot::MT - px(18.0))))
+            .kid(Node::text("steps"));
+        let edges = self.graph.edges().iter().zip(self.plot.routes()).map(|(e, d)| {
+            let title = if e.kind().ink() == Kind::Proj {
+                Node::text(Kind::Proj.glyph())
+            } else {
+                Node::text(e.kind())
+            };
+            Node::el(Tag::Path)
+                .class([Class::Ge, Class::Ink(e.kind())])
+                .attr(Attr::Source(e.from()))
+                .attr(Attr::Target(e.to()))
+                .attr(Attr::Style(Style::Row(self.graph.vertex(e.from()).depth())))
+                .attr(Attr::Unit)
+                .attr(Attr::D(d.clone()))
+                .attr(Attr::MarkerEnd(self.plate, e.kind().ink()))
+                .kid(Node::el(Tag::Title).kid(title))
+        });
+        let nodes = self.graph.vertices().map(|(i, v)| self.vertex(i, v, sel));
+        let markers = Self::KINDS.iter().map(|k| {
+            Node::el(Tag::Marker)
+                .attr(Attr::Marker(self.plate, *k))
+                .attr(Attr::ViewBox(js(Px::ZERO), js(Px::ZERO), js(px(10.0)), js(px(10.0))))
+                .attr(Attr::RefX(js(px(8.0))))
+                .attr(Attr::RefY(js(px(5.0))))
+                .attr(Attr::MarkerWidth(js(px(5.5))))
+                .attr(Attr::MarkerHeight(js(px(5.5))))
+                .attr(Attr::Orient)
+                .kid(
+                    Node::el(Tag::Path)
+                        .attr(Attr::D(Self::arrowhead()))
+                        .attr(Attr::Style(Style::Fill(*k))),
+                )
+        });
+        Node::list([
+            Node::el(Tag::Defs).kids(markers),
+            Node::el(Tag::G).class([Class::Grid]).kids(grid).kid(head),
+            Node::el(Tag::G).class([Class::Routes]),
+            Node::el(Tag::G).class([Class::Edges]).kids(edges),
+            Node::el(Tag::G).class([Class::Nodes]).kids(nodes),
+        ])
     }
 
-    pub fn svg(&self, sel: Option<usize>) -> String {
-        let (p, r) = (&self.plot, Plot::R);
-        let n = Self::n;
-        let grid = (0..p.rows())
-            .map(|d| {
-                let y = Plot::MT + d as f64 * Plot::ROWH;
-                format!(
-                    "<line class=\"rdx-gridline\" x1=\"{}\" x2=\"{}\" y1=\"{}\" y2=\"{}\"/><text class=\"rdx-ax\" x=\"{}\" y=\"{}\">{d}</text>",
-                    n(Plot::ML - 18.0),
-                    n(p.width() - 12.0),
-                    n(y),
-                    n(y),
-                    n(Plot::ML - 26.0),
-                    n(y)
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat()
-            + &format!("<text class=\"rdx-ax head\" x=\"{}\" y=\"{}\">steps</text>", n(Plot::ML - 26.0), n(Plot::MT - 18.0));
-        let vs = self.graph.vertices();
-        let edges = self
-            .graph
-            .edges()
-            .iter()
-            .zip(p.routes())
-            .map(|(e, d)| {
-                let k = e.kind().class();
-                format!(
-                    "<path class=\"rdx-ge k-{k}\" data-from=\"{}\" data-to=\"{}\" style=\"--d:{}\" pathLength=\"1\" d=\"{d}\" marker-end=\"url(#{}-{k})\"><title>{}</title></path>",
-                    e.from(),
-                    e.to(),
-                    vs[e.from()].depth(),
-                    self.uid,
-                    if k == "proj" { "π" } else { e.kind().name() }
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat();
-        let nodes = vs
-            .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                let s = &p.spots()[i];
-                let (x, y) = (s.x(), s.y());
-                let mark = match s.form() {
-                    Form::Nf => format!("<rect class=\"m nf\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/>", n(x - r), n(y - r), n(2.0 * r), n(2.0 * r)),
-                    Form::Whnf => format!(
-                        "<path class=\"m whnf\" d=\"M{} {}L{} {}L{} {}L{} {}Z\"/>",
-                        n(x),
-                        n(y - r - 1.5),
-                        n(x + r + 1.5),
-                        n(y),
-                        n(x),
-                        n(y + r + 1.5),
-                        n(x - r - 1.5),
-                        n(y)
-                    ),
-                    Form::Red => format!("<circle class=\"m red\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>", n(x), n(y), n(r)),
-                };
-                let cls = ["rdx-gn", if i == 0 { "start" } else { "" }, if v.open() { "open" } else { "" }, if sel == Some(i) { "sel" } else { "" }]
-                    .into_iter()
-                    .filter(|c| !c.is_empty())
-                    .collect::<Vec<&str>>()
-                    .join(" ");
-                let size = v.term().size();
-                format!(
-                    "<g class=\"{cls}\" data-id=\"{i}\" style=\"--d:{}\" tabindex=\"0\" role=\"button\" aria-label=\"{}\"><circle class=\"hit\" cx=\"{}\" cy=\"{}\" r=\"15\"/><circle class=\"halo\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>{}{mark}<text class=\"rdx-sz\" x=\"{}\" y=\"{}\">{size}</text></g>",
-                    v.depth(),
-                    Html::esc(&format!("{}, size {size}: {}", s.form().label(), self.labels[i])),
-                    n(x),
-                    n(y),
-                    n(x),
-                    n(y),
-                    n(r + 6.0),
-                    if i == 0 { format!("<circle class=\"ring\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>", n(x), n(y), n(r + 4.0)) } else { String::new() },
-                    n(x + r + 5.0),
-                    n(y + 9.0)
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat();
-        let markers = Self::KINDS
-            .iter()
-            .map(|k| {
-                format!(
-                    "<marker id=\"{uid}-{k}\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"5.5\" markerHeight=\"5.5\" orient=\"auto-start-reverse\"><path d=\"M0 0L10 5L0 10z\" style=\"fill:var(--rdx-{k})\"/></marker>",
-                    uid = self.uid,
-                    k = k.name(),
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat();
-        format!(
-            "<defs>{markers}</defs><g class=\"grid\">{grid}</g><g class=\"routes\"></g><g class=\"edges\">{edges}</g><g class=\"nodes\">{nodes}</g>"
-        )
+    /// `M0 0L10 5L0 10z`.
+    fn arrowhead() -> Trace {
+        let n = |v: f64| Num::Js(Px::new(v));
+        Trace::tight(vec![
+            Seg::Move(n(0.0), n(0.0)),
+            Seg::Line(n(10.0), n(5.0)),
+            Seg::Line(n(0.0), n(10.0)),
+            Seg::End,
+        ])
+    }
+
+    fn vertex(&self, i: Id, v: &Vertex, sel: Option<Id>) -> Node {
+        let js = Num::Js;
+        let (s, r, px) = (self.plot.spot(i), Plot::R, Px::new);
+        let (x, y) = (s.x(), s.y());
+        let mark = match s.form() {
+            Form::Nf => Node::el(Tag::Rect)
+                .class([Class::Mark, Class::Nf])
+                .attr(Attr::X(js(x - r)))
+                .attr(Attr::Y(js(y - r)))
+                .attr(Attr::Width(js(r * 2.0)))
+                .attr(Attr::Height(js(r * 2.0))),
+            Form::Whnf => Node::el(Tag::Path)
+                .class([Class::Mark, Class::Whnf])
+                .attr(Attr::D(Trace::tight(vec![
+                    Seg::Move(js(x), js(y - r - px(1.5))),
+                    Seg::Line(js(x + r + px(1.5)), js(y)),
+                    Seg::Line(js(x), js(y + r + px(1.5))),
+                    Seg::Line(js(x - r - px(1.5)), js(y)),
+                    Seg::Close,
+                ]))),
+            Form::Red => Node::el(Tag::Circle)
+                .class([Class::Mark, Class::Red])
+                .attr(Attr::Cx(js(x)))
+                .attr(Attr::Cy(js(y)))
+                .attr(Attr::R(js(r))),
+        };
+        let root = i == Id::ROOT;
+        let classes = [
+            Some(Class::Gn),
+            root.then_some(Class::Start),
+            v.open().then_some(Class::Open),
+            (sel == Some(i)).then_some(Class::Sel),
+        ]
+        .into_iter()
+        .flatten();
+        let size = v.term().size();
+        let ring = root.then(|| {
+            Node::el(Tag::Circle)
+                .class([Class::Ring])
+                .attr(Attr::Cx(js(x)))
+                .attr(Attr::Cy(js(y)))
+                .attr(Attr::R(js(r + px(4.0))))
+        });
+        Node::el(Tag::G)
+            .class(classes)
+            .attr(Attr::Vertex(i))
+            .attr(Attr::Style(Style::Row(v.depth())))
+            .attr(Attr::Focusable)
+            .attr(Attr::Clickable)
+            .attr(Attr::Label(format!("{}, size {size}: {}", s.form().label(), v.term().text())))
+            .kid(
+                Node::el(Tag::Circle)
+                    .class([Class::Hit])
+                    .attr(Attr::Cx(js(x)))
+                    .attr(Attr::Cy(js(y)))
+                    .attr(Attr::R(js(px(15.0)))),
+            )
+            .kid(
+                Node::el(Tag::Circle)
+                    .class([Class::Halo])
+                    .attr(Attr::Cx(js(x)))
+                    .attr(Attr::Cy(js(y)))
+                    .attr(Attr::R(js(r + px(6.0)))),
+            )
+            .kids(ring)
+            .kid(mark)
+            .kid(
+                Node::el(Tag::Text)
+                    .class([Class::Sz])
+                    .attr(Attr::X(js(x + r + px(5.0))))
+                    .attr(Attr::Y(js(y + px(9.0))))
+                    .kid(Node::text(size)),
+            )
     }
 
     pub fn stats(&self) -> String {
-        let (n, e, nf) = (self.graph.vertices().len(), self.graph.edges().len(), self.normal());
+        let (n, e, nf) = (self.graph.len(), self.graph.edges().len(), self.graph.normal());
         format!(
             "{n} term{} · {e} step{} · {nf} normal form{}{}",
             if n > 1 { "s" } else { "" },
@@ -209,136 +235,148 @@ impl Chart {
         )
     }
 
-    fn normal(&self) -> usize {
-        self.graph.vertices().iter().filter(|v| v.nf()).count()
-    }
-
     pub fn verdict(&self) -> String {
-        let nf = self.normal();
-        let mut v = match (nf, self.graph.truncated()) {
-            (1, true) => "Every finished path so far ends at the same normal form.".to_string(),
-            (1, false) => "Every path that finishes ends at the same normal form.".to_string(),
-            _ => String::new(),
+        let nf = self.graph.normal();
+        let finished = match (nf, self.graph.truncated()) {
+            (1, true) => "Every finished path so far ends at the same normal form.",
+            (1, false) => "Every path that finishes ends at the same normal form.",
+            _ => "",
         };
-        if self.graph.cyclic() {
-            v += if nf > 0 {
-                " Some paths loop instead of finishing."
-            } else {
-                "No normal form: every path keeps going."
-            };
-        }
+        let looping = match (self.graph.cyclic(), nf > 0) {
+            (true, true) => " Some paths loop instead of finishing.",
+            (true, false) => "No normal form: every path keeps going.",
+            (false, _) => "",
+        };
         if self.graph.edges().is_empty() {
-            v = "Already in normal form. Nothing to fire.".to_string();
+            "Already in normal form. Nothing to fire.".to_string()
+        } else {
+            format!("{finished}{looping}").trim().to_string()
         }
-        v.trim().to_string()
     }
 
-    pub fn pills(route: &str) -> String {
-        Route::ALL
-            .iter()
-            .map(|r| {
-                let on = r.id == route;
-                format!(
-                    "<button type=\"button\" class=\"rdx-pill{}\" data-route=\"{}\" aria-pressed=\"{on}\">{}</button>",
-                    if on { " on" } else { "" },
-                    r.id,
-                    r.label
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat()
+    pub fn pills(route: Option<Strategy>) -> Node {
+        Node::list(Self::ROUTES.iter().map(|r| {
+            let on = *r == route;
+            Node::el(Tag::Button)
+                .attr(Attr::Button)
+                .class([Class::Pill].into_iter().chain(on.then_some(Class::On)))
+                .attr(Attr::Route(*r))
+                .attr(Attr::Pressed(on))
+                .kid(Node::text(r.map_or("None", Strategy::label)))
+        }))
     }
 
-    /// The band markup and the note for a route.
-    pub fn band(&self, route: &str) -> (String, String) {
-        let Some(r) = Route::ALL.iter().find(|r| r.id == route) else {
-            return (String::new(), String::new());
+    /// The band along the edges a strategy takes, and the note that says how far it got.
+    pub fn band(&self, route: Option<Strategy>) -> (Node, String) {
+        let Some(strategy) = route else {
+            return (Node::none(), String::new());
         };
-        let Some(strategy) = r.strategy else {
-            return (String::new(), String::new());
-        };
-        let run = Run::new(self.graph.root().term(), &self.env, strategy, 40);
+        let run = Run::new(self.graph.root().term(), &self.env, strategy, Self::ROUTE);
         let find = |t: &Term| self.graph.find(&t.key());
-        let (mut paths, mut steps, mut left) = (String::new(), 0, false);
-        for i in 1..run.rows().len() {
-            let (Some(a), Some(b)) = (find(run.rows()[i - 1].term()), find(run.rows()[i].term())) else {
-                left = true;
-                break;
-            };
-            let edges = self.graph.edges();
-            let hit = edges
+        let rows = run.rows();
+        let walked = (1..rows.len())
+            .map_while(|i| Some((i, find(rows[i - 1].term())?, find(rows[i].term())?)))
+            .collect::<Vec<(usize, Id, Id)>>();
+        let left = walked.len() + 1 < rows.len();
+        let steps = Step::new(walked.last().map_or(0, |w| w.0));
+        let edges = self.graph.edges();
+        let paths = walked.iter().filter_map(|&(i, a, b)| {
+            edges
                 .iter()
-                .position(|e| e.from() == a && e.to() == b && Some(e.kind()) == run.rows()[i].kind())
-                .or_else(|| edges.iter().position(|e| e.from() == a && e.to() == b));
-            if let Some(e) = hit {
-                paths += &format!("<path class=\"rdx-band\" d=\"{}\"/>", self.plot.routes()[e]);
-            }
-            steps = i;
-        }
-        let end = find(run.rows()[steps.min(run.rows().len() - 1)].term());
-        if let Some(end) = end.filter(|_| run.status() == Status::Done && !left) {
-            let s = &self.plot.spots()[end];
-            paths += &format!(
-                "<circle class=\"rdx-band-end\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>",
-                Self::n(s.x()),
-                Self::n(s.y()),
-                Self::n(Plot::R + 9.0)
-            );
-        }
+                .position(|e| e.joins(a, b) && Some(e.kind()) == rows[i].kind())
+                .or_else(|| edges.iter().position(|e| e.joins(a, b)))
+                .map(|e| {
+                    Node::el(Tag::Path)
+                        .class([Class::Band])
+                        .attr(Attr::D(self.plot.routes()[e].clone()))
+                })
+        });
+        let end = find(rows[steps.get().min(rows.len() - 1)].term());
+        let ring = end.filter(|_| run.status() == Status::Done && !left).map(|e| {
+            let s = self.plot.spot(e);
+            Node::el(Tag::Circle)
+                .class([Class::BandEnd])
+                .attr(Attr::Cx(Num::Js(s.x())))
+                .attr(Attr::Cy(Num::Js(s.y())))
+                .attr(Attr::R(Num::Js(Plot::R + Px::new(9.0))))
+        });
+        let label = strategy.label();
         let note = match (left, run.status()) {
-            (true, _) => format!("{} leaves the explored graph after {steps} steps.", r.label),
+            (true, _) => format!("{label} leaves the explored graph after {steps} steps."),
             (false, Status::Done) => format!(
-                "{}: {steps} step{} to a {}.",
-                r.label,
-                if steps == 1 { "" } else { "s" },
-                end.map_or("stop", |e| self.plot.spots()[e].form().label())
+                "{label}: {steps} step{} to a {}.",
+                if steps == Step::ONE { "" } else { "s" },
+                end.map_or("stop", |e| self.plot.spot(e).form().label())
             ),
-            (false, _) => format!("{} never stops: it loops.", r.label),
+            (false, _) => format!("{label} never stops: it loops."),
         };
-        (paths, note)
+        (Node::list(paths).kids(ring), note)
     }
 
-    pub fn tip(&self, i: usize) -> String {
-        let v = &self.graph.vertices()[i];
-        format!(
-            "<div class=\"rdx-tip-meta\"><b>{}</b> · size {} · {} step{} from the start</div><div class=\"rdx-tm\">{}</div>",
-            self.plot.spots()[i].form().label(),
+    pub fn tip(&self, i: Id) -> Node {
+        let v = self.graph.vertex(i);
+        let d = v.depth();
+        let meta = format!(
+            " · size {} · {d} step{} from the start",
             v.term().size(),
-            v.depth(),
-            if v.depth() == 1 { "" } else { "s" },
-            Html::esc(&self.labels[i])
-        )
+            if d == Depth::new(1) { "" } else { "s" }
+        );
+        Node::list([
+            Node::el(Tag::Div)
+                .class([Class::TipMeta])
+                .kid(Node::el(Tag::B).kid(Node::text(self.plot.spot(i).form().label())))
+                .kid(Node::text(meta)),
+            Node::el(Tag::Div).class([Class::Tm]).kid(Node::text(v.term().text())),
+        ])
     }
 
-    pub fn selected(&self, sel: Option<usize>) -> String {
+    pub fn selected(&self, sel: Option<Id>) -> Node {
         let Some(i) = sel else {
-            return "<p>Hover a mark to read its term. Click it to open it in the workbench.</p>".to_string();
+            return Node::el(Tag::P)
+                .kid(Node::text("Hover a mark to read its term. Click it to open it in the workbench."));
         };
-        let v = &self.graph.vertices()[i];
-        let where_ = match v.depth() {
-            0 => "Start term".to_string(),
-            d => format!("{d} step{} from the start on the shortest path", if d > 1 { "s" } else { "" }),
+        let v = self.graph.vertex(i);
+        let place = match v.depth() {
+            Depth::START => "Start term".to_string(),
+            d => format!("{d} step{} from the start on the shortest path", if d > Depth::new(1) { "s" } else { "" }),
         };
-        format!(
-            "<div class=\"rdx-scroll\"><div class=\"rdx-stage small flat rdx-tm\">{}</div></div><div class=\"rdx-row\"><span>{where_} · {} · size {}</span><span class=\"rdx-grow\"></span><button class=\"rdx-btn primary\" type=\"button\" data-act=\"open\">Open in workbench</button></div>",
-            Blocks::new(&self.env, false, false).html(v.term()),
-            self.plot.spots()[i].form().label(),
-            v.term().size()
-        )
+        Node::list([
+            Node::el(Tag::Div).class([Class::Scroll]).kid(
+                Node::el(Tag::Div)
+                    .class([Class::Stage, Class::Small, Class::Flat, Class::Tm])
+                    .kid(Blocks::new(&self.env, false, false).node(v.term())),
+            ),
+            Node::el(Tag::Div)
+                .class([Class::Row])
+                .kid(Node::el(Tag::Span).kid(Node::text(format!(
+                    "{place} · {} · size {}",
+                    self.plot.spot(i).form().label(),
+                    v.term().size()
+                ))))
+                .kid(Node::el(Tag::Span).class([Class::Grow]))
+                .kid(
+                    Node::el(Tag::Button)
+                        .class([Class::Btn, Class::Primary])
+                        .attr(Attr::Button)
+                        .attr(Attr::Act(Act::Open))
+                        .kid(Node::text("Open in workbench")),
+                ),
+        ])
     }
 
     /// The start-to-here chain of a vertex, as history entries.
-    pub fn chain(&self, i: usize) -> Vec<Entry> {
-        let vs = self.graph.vertices();
-        let mut chain = std::iter::successors(Some(i), |&k| vs[k].parent()).collect::<Vec<usize>>();
+    pub fn chain(&self, i: Id) -> Vec<Entry> {
+        let mut chain = std::iter::successors(Some(i), |&k| self.graph.vertex(k).parent()).collect::<Vec<Id>>();
         chain.reverse();
         chain
             .iter()
             .enumerate()
-            .map(|(j, &k)| Entry {
-                term: vs[k].term().clone(),
-                kind: if j > 0 { vs[k].pkind() } else { None },
-                note: None,
+            .map(|(j, &k)| {
+                Entry::new(
+                    self.graph.vertex(k).term().clone(),
+                    if j > 0 { self.graph.vertex(k).pkind() } else { None },
+                    None,
+                )
             })
             .collect()
     }
@@ -349,61 +387,86 @@ struct Board {
     session: Session,
     anchor: NodeRef<html::Div>,
     chart: RefCell<Option<Chart>>,
-    sel: Cell<Option<usize>>,
-    route: Cell<&'static str>,
-    uid: String,
+    sel: Cell<Option<Id>>,
+    route: Cell<Option<Strategy>>,
+    plate: Plate,
 }
 
 impl Board {
-    fn q(&self, sel: &str) -> Option<Element> {
+    /// The entrance: marks fade in row by row, then the edges leaving them draw.
+    const ROW: Ms = Ms::new(70.0);
+
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn chart(&self) -> &RefCell<Option<Chart>> {
+        &self.chart
+    }
+
+    fn sel(&self) -> &Cell<Option<Id>> {
+        &self.sel
+    }
+
+    fn route(&self) -> &Cell<Option<Strategy>> {
+        &self.route
+    }
+
+    fn q(&self, sel: &Selector) -> Option<Element> {
+        Doc::above(self.anchor().get_untracked()).and_then(|r| Doc::q(&r, sel))
+    }
+
+    fn anchor(&self) -> NodeRef<html::Div> {
         self.anchor
-            .get_untracked()
-            .and_then(|a| a.parent_element())
-            .and_then(|r| Doc::q(&r, sel))
+    }
+
+    fn svg(&self) -> Option<Element> {
+        self.q(&Class::Gsvg.into())
     }
 
     fn eta(&self) -> Option<web_sys::HtmlInputElement> {
-        self.q("[data-opt=\"eta\"]").and_then(|e| e.dyn_into().ok())
+        self.q(&Selector::is(Data::Opt, &Opt::Eta))
+            .and_then(|e| e.dyn_into().ok())
     }
 
     fn build(&self, start: &Term) {
-        let eta = self.eta().is_some_and(|e| e.checked());
-        *self.chart.borrow_mut() = Some(Chart::new(start, &self.session.env(), eta, &self.uid));
-        self.sel.set(None);
+        let eta = self.eta().as_ref().is_some_and(web_sys::HtmlInputElement::checked);
+        *self.chart().borrow_mut() = Some(Chart::new(start, &self.session().env(), eta, self.plate()));
+        self.sel().set(None);
         self.draw();
     }
 
+    fn plate(&self) -> Plate {
+        self.plate
+    }
+
     fn draw(&self) {
-        let Some(svg) = self.q(".rdx-gsvg") else { return };
-        {
-            let chart = self.chart.borrow();
-            let Some(chart) = chart.as_ref() else { return };
-            let (w, h) = (Number::show(chart.plot().width()), Number::show(chart.plot().height()));
-            let _ = svg.set_attribute("width", &w);
-            let _ = svg.set_attribute("height", &h);
-            let _ = svg.set_attribute("viewBox", &format!("0 0 {w} {h}"));
-            svg.set_inner_html(&chart.svg(self.sel.get()));
+        let Some(svg) = self.svg() else { return };
+        if let Some(chart) = self.chart().borrow().as_ref() {
+            let (w, h) = (Num::Js(chart.plot().width()), Num::Js(chart.plot().height()));
+            Doc::put(&svg, &Attr::Width(w));
+            Doc::put(&svg, &Attr::Height(h));
+            Doc::put(&svg, &Attr::ViewBox(Num::Js(Px::ZERO), Num::Js(Px::ZERO), w, h));
+            Doc::fill(&svg, &chart.svg(self.sel().get()));
             let row = |e: &Element| {
-                e.dyn_ref::<web_sys::SvgElement>()
-                    .and_then(|s| s.style().get_property_value("--d").ok())
-                    .and_then(|d| d.trim().parse::<f64>().ok())
-                    .unwrap_or(0.0)
-                    * 70.0
+                Self::ROW
+                    * e.dyn_ref::<web_sys::SvgElement>()
+                        .and_then(|s| s.style().get_property_value("--d").ok())
+                        .and_then(|d| d.trim().parse::<f64>().ok())
+                        .unwrap_or(0.0)
             };
-            let grow = Doc::all(&svg, ".rdx-gn")
+            let grow = Doc::all(&svg, &Class::Gn.into())
                 .iter()
-                .map(|g| Motion::after(row(g), Motion::enter(g, Tween::default().ms(400.0))))
-                .chain(
-                    Doc::all(&svg, ".rdx-ge")
-                        .iter()
-                        .map(|p| Motion::after(row(p) + 90.0, Motion::draw(p, Tween::default().ms(500.0)))),
-                )
+                .map(|g| Motion::after(row(g), Motion::enter(g, Tween::default().ms(Ms::new(400.0)))))
+                .chain(Doc::all(&svg, &Class::Ge.into()).iter().map(|p| {
+                    Motion::after(row(p) + Ms::new(90.0), Motion::draw(p, Tween::default().ms(Ms::new(500.0))))
+                }))
                 .collect();
             leptos::task::spawn_local(Motion::all(grow).play(Clock::default()));
-            if let Some(stats) = self.q(".rdx-gstats") {
+            if let Some(stats) = self.q(&Class::Gstats.into()) {
                 stats.set_text_content(Some(&chart.stats()));
             }
-            if let Some(verdict) = self.q(".rdx-verdict") {
+            if let Some(verdict) = self.q(&Class::Verdict.into()) {
                 verdict.set_text_content(Some(&chart.verdict()));
             }
         }
@@ -413,72 +476,63 @@ impl Board {
     }
 
     fn render_routes(&self) {
-        if let Some(pills) = self.q("[data-routes]") {
-            pills.set_inner_html(&Chart::pills(self.route.get()));
+        if let Some(pills) = self.q(&Selector::Has(Data::Routes)) {
+            Doc::fill(&pills, &Chart::pills(self.route().get()));
         }
         let (band, note) = self
-            .chart
+            .chart()
             .borrow()
             .as_ref()
-            .map(|c| c.band(self.route.get()))
-            .unwrap_or_default();
-        if let Some(g) = self.q(".rdx-gsvg .routes") {
-            g.set_inner_html(&band);
+            .map_or_else(|| (Node::none(), String::new()), |c| c.band(self.route().get()));
+        if let Some(g) = self.q(&Selector::from(Class::Gsvg).within(Class::Routes.into())) {
+            Doc::fill(&g, &band);
         }
-        if let Some(n) = self.q(".rdx-route-note") {
+        if let Some(n) = self.q(&Class::RouteNote.into()) {
             n.set_text_content(Some(&note));
         }
     }
 
     fn render_sel(&self) {
-        if let (Some(b), Some(c)) = (self.q(".rdx-gsel"), self.chart.borrow().as_ref()) {
-            b.set_inner_html(&c.selected(self.sel.get()));
+        if let (Some(b), Some(c)) = (self.q(&Class::Gsel.into()), self.chart().borrow().as_ref()) {
+            Doc::fill(&b, &c.selected(self.sel().get()));
         }
     }
 
-    fn select(&self, i: usize) {
-        self.sel.set(Some(i));
-        if let Some(svg) = self.q(".rdx-gsvg") {
-            Doc::all(&svg, ".rdx-gn")
+    fn select(&self, i: Id) {
+        self.sel().set(Some(i));
+        if let Some(svg) = self.svg() {
+            Doc::all(&svg, &Class::Gn.into())
                 .iter()
-                .for_each(|g| Doc::toggle(g, "sel", Doc::attr(g, "data-id") == Some(i.to_string())));
+                .for_each(|g| Doc::toggle(g, Class::Sel, Doc::read::<Id>(g, Data::Id) == Some(i)));
         }
         self.render_sel();
     }
 
     /// The workbench's position: its term gets a halo, the steps it walked are marked.
     fn mark(&self) {
-        let chart = self.chart.borrow();
-        let (Some(chart), Some(svg)) = (chart.as_ref(), self.q(".rdx-gsvg")) else {
+        let chart = self.chart().borrow();
+        let (Some(chart), Some(svg)) = (chart.as_ref(), self.svg()) else {
             return;
         };
-        let id = |t: &Term| chart.graph().find(&t.key()).map_or(-1, |i| i as i64);
-        let (here, walked) = {
-            let s = self.session.state();
-            let here = id(&s.hist[s.idx].term);
-            let walked = (1..=s.idx)
-                .map(|i| (id(&s.hist[i - 1].term), id(&s.hist[i].term)))
-                .filter(|(a, b)| *a >= 0 && *b >= 0 && a != b)
-                .map(|(a, b)| format!("{a}>{b}"))
-                .collect::<Vec<String>>();
-            (here, walked)
-        };
-        Doc::all(&svg, ".rdx-gn")
+        let id = |t: &Term| chart.graph().find(&t.key());
+        let hist = self.session().history();
+        let here = id(hist[self.session().idx().get()].term());
+        let walked = (1..=self.session().idx().get())
+            .filter_map(|i| Some((id(hist[i - 1].term())?, id(hist[i].term())?)))
+            .filter(|(a, b)| a != b)
+            .collect::<Vec<(Id, Id)>>();
+        Doc::all(&svg, &Class::Gn.into())
             .iter()
-            .for_each(|g| Doc::toggle(g, "here", Doc::attr(g, "data-id") == Some(here.to_string())));
-        Doc::all(&svg, ".rdx-ge").iter().for_each(|g| {
-            let key = format!(
-                "{}>{}",
-                Doc::attr(g, "data-from").unwrap_or_default(),
-                Doc::attr(g, "data-to").unwrap_or_default()
-            );
-            Doc::toggle(g, "walked", walked.contains(&key));
+            .for_each(|g| Doc::toggle(g, Class::Here, here.is_some() && Doc::read::<Id>(g, Data::Id) == here));
+        Doc::all(&svg, &Class::Ge.into()).iter().for_each(|g| {
+            let edge = Doc::read::<Id>(g, Data::From).zip(Doc::read::<Id>(g, Data::To));
+            Doc::toggle(g, Class::Walked, edge.is_some_and(|e| walked.contains(&e)));
         });
     }
 
     fn show_tip(&self, g: Option<Element>) {
         let Some(tip) = self
-            .q(".rdx-tip")
+            .q(&Class::Tip.into())
             .and_then(|t| t.dyn_into::<web_sys::HtmlElement>().ok())
         else {
             return;
@@ -487,69 +541,88 @@ impl Board {
             tip.set_hidden(true);
             return;
         };
-        let Some(i) = Doc::attr(&g, "data-id").and_then(|i| i.parse::<usize>().ok()) else {
-            return;
-        };
-        if let Some(c) = self.chart.borrow().as_ref() {
-            tip.set_inner_html(&c.tip(i));
+        let Some(i) = Doc::read::<Id>(&g, Data::Id) else { return };
+        if let Some(c) = self.chart().borrow().as_ref() {
+            Doc::fill(&tip, &c.tip(i));
         }
         tip.set_hidden(false);
-        let (Some(wrap), Some(hit)) = (self.q(".rdx-gwrap"), Doc::q(&g, ".hit")) else {
+        let (Some(wrap), Some(hit)) = (self.q(&Class::Gwrap.into()), Doc::q(&g, &Class::Hit.into())) else {
             return;
         };
         let (wrap, r) = (wrap.get_bounding_client_rect(), hit.get_bounding_client_rect());
-        let (tw, th) = (f64::from(tip.offset_width()), f64::from(tip.offset_height()));
-        let left = (r.left() - wrap.left() + r.width() / 2.0 - tw / 2.0)
-            .max(8.0)
-            .min(wrap.width() - tw - 8.0);
-        let below = r.top() - wrap.top() < th + 12.0;
+        let (tw, th) = (Px::new(f64::from(tip.offset_width())), Px::new(f64::from(tip.offset_height())));
+        let left = (Px::new(r.left() - wrap.left() + r.width() / 2.0) - tw / 2.0)
+            .max(Px::new(8.0))
+            .min(Px::new(wrap.width()) - tw - Px::new(8.0));
+        let below = Px::new(r.top() - wrap.top()) < th + Px::new(12.0);
         let top = if below {
-            r.bottom() - wrap.top() + 6.0
+            Px::new(r.bottom() - wrap.top() + 6.0)
         } else {
-            r.top() - wrap.top() - th - 6.0
+            Px::new(r.top() - wrap.top()) - th - Px::new(6.0)
         };
         let _ = tip.style().set_property("left", &format!("{left}px"));
         let _ = tip.style().set_property("top", &format!("{top}px"));
     }
 
-    fn open(&self, i: usize) {
-        if self.session.busy() {
+    fn open(&self, i: Id) {
+        if self.session().busy() {
             return;
         }
-        let Some(chain) = self.chart.borrow().as_ref().map(|c| c.chain(i)) else {
+        let Some(chain) = self.chart().borrow().as_ref().map(|c| c.chain(i)) else {
             return;
         };
-        self.session.replace_history(chain);
-        self.session.reveal();
+        self.session().replace_history(chain);
+        self.session().reveal();
     }
 
     fn click(&self, e: &web_sys::Event) {
         let Some(target) = Doc::target(e) else { return };
-        match Doc::closest(&target, "[data-act]")
-            .and_then(|a| Doc::attr(&a, "data-act"))
-            .as_deref()
-        {
-            Some("rebuild") => self.build(&self.session.term()),
-            Some("open") => {
-                if let Some(i) = self.sel.get() {
+        match Doc::closest(&target, &Selector::Has(Data::Act)).and_then(|a| Doc::read::<Act>(&a, Data::Act)) {
+            Some(Act::Rebuild) => self.build(&self.session().term()),
+            Some(Act::Open) => {
+                if let Some(i) = self.sel().get() {
                     self.open(i);
                 }
             }
             _ => {}
         }
-        if let Some(id) = Doc::closest(&target, "[data-route]").and_then(|r| Doc::attr(&r, "data-route")) {
-            self.route
-                .set(Route::ALL.iter().find(|r| r.id == id).map_or("none", |r| r.id));
+        if let Some(route) =
+            Doc::closest(&target, &Selector::Has(Data::Route)).and_then(|r| r.get_attribute(Data::Route.name()))
+        {
+            self.route().set(
+                Chart::ROUTES
+                    .into_iter()
+                    .find(|r| r.map_or("none", Strategy::id) == route)
+                    .flatten(),
+            );
             self.render_routes();
         }
     }
 
     fn mark_of(e: &web_sys::Event) -> Option<Element> {
-        Doc::target(e).and_then(|t| Doc::closest(&t, ".rdx-gn"))
+        Doc::target(e).and_then(|t| Doc::closest(&t, &Class::Gn.into()))
     }
 
-    fn id_of(g: &Element) -> Option<usize> {
-        Doc::attr(g, "data-id").and_then(|i| i.parse().ok())
+    fn rebuild(&self) {
+        let start = self.chart().borrow().as_ref().map(|c| c.graph().root().term().clone());
+        if let Some(start) = start {
+            self.build(&start);
+        }
+    }
+
+    fn key(&self, e: &web_sys::KeyboardEvent) {
+        if let Some(i) = Self::mark_of(e).and_then(|g| Doc::read::<Id>(&g, Data::Id))
+            && (e.key() == "Enter" || e.key() == " ")
+        {
+            e.prevent_default();
+            self.select(i);
+        }
+    }
+
+    fn pick(&self, e: &web_sys::Event) {
+        if let Some(i) = Self::mark_of(e).and_then(|g| Doc::read::<Id>(&g, Data::Id)) {
+            self.select(i);
+        }
     }
 }
 
@@ -561,125 +634,95 @@ pub fn Paths() -> impl IntoView {
         anchor: NodeRef::new(),
         chart: RefCell::new(None),
         sel: Cell::new(None),
-        route: Cell::new("none"),
-        uid: format!("rdx{}", Doc::next_id()),
+        route: Cell::new(None),
+        plate: Plate::next(),
     });
     let me = board.clone();
-    board.session.on(move |e| {
-        if e == Event::Load {
+    board.session().on(move |e| match e {
+        Event::Load => {
             if let Some(eta) = me.eta() {
-                eta.set_checked(me.session.state().eta);
+                eta.set_checked(me.session().eta());
             }
-            me.build(&me.session.start());
-        } else if e == Event::Step {
-            me.mark();
+            me.build(&me.session().start());
         }
+        Event::Step => me.mark(),
+        Event::Reveal => {}
     });
-    let (b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) = (
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-        board.clone(),
-    );
-    let anchor = board.anchor;
+    let anchor = board.anchor();
+    let [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10] = std::array::from_fn(|_| board.clone());
+    let legend = |class: &[Class]| Attr::Class(class.to_vec()).to_string();
     view! {
-        <div class="rdx-gbar" node_ref=anchor on:click=move |e| b1.click(&e)>
-            <span class="rdx-gstats"></span>
-            <span class="rdx-grow"></span>
-            <label class="rdx-toggle">
-                <input
-                    type="checkbox"
-                    data-opt="eta"
-                    on:change=move |_| {
-                        let start = b2.chart.borrow().as_ref().map(|c| c.graph().root().term().clone());
-                        if let Some(start) = start {
-                            b2.build(&start);
-                        }
-                    }
-                />
+        <div class=Class::Gbar.to_string() node_ref=anchor on:click=move |e| b1.click(&e)>
+            <span class=Class::Gstats.to_string()></span>
+            <span class=Class::Grow.to_string()></span>
+            <label class=Class::Toggle.to_string()>
+                <input type="checkbox" data-opt=Opt::Eta.to_string() on:change=move |_| b2.rebuild()/>
                 " Include η"
             </label>
-            <button type="button" class="rdx-btn" data-act="rebuild">
+            <button type="button" class=Class::Btn.to_string() data-act=Act::Rebuild.to_string()>
                 "Rebuild from current term"
             </button>
         </div>
-        <div class="rdx-gbar" on:click=move |e| b3.click(&e)>
-            <span class="rdx-label">"Route"</span>
-            <div class="rdx-pills" data-routes></div>
-            <span class="rdx-route-note"></span>
+        <div class=Class::Gbar.to_string() on:click=move |e| b3.click(&e)>
+            <span class=Class::Label.to_string()>"Route"</span>
+            <div class=Class::Pills.to_string() data-routes></div>
+            <span class=Class::RouteNote.to_string()></span>
         </div>
-        <p class="rdx-verdict"></p>
-        <div class="rdx-gwrap">
-            <div class="rdx-gscroll">
+        <p class=Class::Verdict.to_string()></p>
+        <div class=Class::Gwrap.to_string()>
+            <div class=Class::Gscroll.to_string()>
                 <svg
-                    class="rdx-gsvg"
+                    class=Class::Gsvg.to_string()
                     role="img"
                     aria-label="Reduction graph"
                     on:mouseover=move |e| b4.show_tip(Board::mark_of(&e))
                     on:mouseleave=move |_| b5.show_tip(None)
                     on:focusin=move |e| b6.show_tip(Board::mark_of(&e))
-                    on:focusout=move |_| b9.show_tip(None)
-                    on:click=move |e| {
-                        if let Some(i) = Board::mark_of(&e).as_ref().and_then(Board::id_of) {
-                            b10.select(i);
-                        }
-                    }
-                    on:keydown=move |e: web_sys::KeyboardEvent| {
-                        if let Some(i) = Board::mark_of(&e).as_ref().and_then(Board::id_of)
-                            && (e.key() == "Enter" || e.key() == " ")
-                        {
-                            e.prevent_default();
-                            b7.select(i);
-                        }
-                    }
+                    on:focusout=move |_| b7.show_tip(None)
+                    on:click=move |e| b8.pick(&e)
+                    on:keydown=move |e: web_sys::KeyboardEvent| b9.key(&e)
                 ></svg>
             </div>
-            <div class="rdx-tip" hidden></div>
+            <div class=Class::Tip.to_string() hidden></div>
         </div>
-        <div class="rdx-glegend">
+        <div class=Class::Glegend.to_string()>
             <span>
                 <svg width="14" height="14">
-                    <circle cx="7" cy="7" r="5" class="m red"></circle>
+                    <circle cx="7" cy="7" r="5" class=legend(&[Class::Mark, Class::Red])></circle>
                 </svg>
                 "reducible"
             </span>
             <span>
                 <svg width="14" height="14">
-                    <path d="M7 1.5L12.5 7L7 12.5L1.5 7Z" class="m whnf"></path>
+                    <path d="M7 1.5L12.5 7L7 12.5L1.5 7Z" class=legend(&[Class::Mark, Class::Whnf])></path>
                 </svg>
                 "weak head normal form"
             </span>
             <span>
                 <svg width="14" height="14">
-                    <rect x="2" y="2" width="10" height="10" class="m nf"></rect>
+                    <rect x="2" y="2" width="10" height="10" class=legend(&[Class::Mark, Class::Nf])></rect>
                 </svg>
                 "normal form"
             </span>
             <span>
                 <svg width="18" height="18">
-                    <circle cx="9" cy="9" r="4.5" class="m red"></circle>
-                    <circle cx="9" cy="9" r="8" class="ring"></circle>
+                    <circle cx="9" cy="9" r="4.5" class=legend(&[Class::Mark, Class::Red])></circle>
+                    <circle cx="9" cy="9" r="8" class=Class::Ring.to_string()></circle>
                 </svg>
                 "start"
             </span>
             <span>
                 <svg width="18" height="18">
-                    <circle cx="9" cy="9" r="4.5" class="m red"></circle>
-                    <circle cx="9" cy="9" r="8" class="halo"></circle>
+                    <circle cx="9" cy="9" r="4.5" class=legend(&[Class::Mark, Class::Red])></circle>
+                    <circle cx="9" cy="9" r="8" class=Class::Halo.to_string()></circle>
                 </svg>
                 "workbench is here"
             </span>
             <span>
-                <b class="rdx-sz">"12"</b>
+                <b class=Class::Sz.to_string()>"12"</b>
                 " term size"
             </span>
         </div>
-        <div class="rdx-gsel" on:click=move |e| b8.click(&e)></div>
+        <div class=Class::Gsel.to_string() on:click=move |e| b10.click(&e)></div>
     }
 }

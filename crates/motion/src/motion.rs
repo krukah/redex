@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use units::*;
 use wasm_bindgen::prelude::*;
 use web_sys::DomRect;
 use web_sys::Element;
@@ -14,7 +15,7 @@ pub struct Motion(Box<dyn FnOnce(Clock) -> Pin<Box<dyn Future<Output = ()>>>>);
 
 impl Motion {
     /// The length of one firing's movement, at speed 1.
-    pub const BEAT: f64 = 620.0;
+    pub const BEAT: Ms = Ms::new(620.0);
 
     pub fn new<F>(play: F) -> Self
     where
@@ -36,12 +37,13 @@ impl Motion {
     pub fn enabled() -> bool {
         !web_sys::window()
             .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten())
-            .is_some_and(|m| m.matches())
+            .as_ref()
+            .is_some_and(web_sys::MediaQueryList::matches)
     }
 
     /// Resolves after `ms`, as `setTimeout` counts them.
-    pub fn wait(ms: f64) -> Pin<Box<dyn Future<Output = ()>>> {
-        Box::pin(gloo_timers::future::TimeoutFuture::new(if ms > 0.0 { ms as u32 } else { 0 }))
+    pub fn wait(ms: Ms) -> Pin<Box<dyn Future<Output = ()>>> {
+        Box::pin(gloo_timers::future::TimeoutFuture::new(ms.whole()))
     }
 
     /// The one place that calls `Element::animate`.
@@ -64,9 +66,9 @@ impl Motion {
             let (duration, delay) = (clock.scale(o.duration()), clock.scale(o.wait()));
             let opts = js_sys::Object::new();
             [
-                ("duration", JsValue::from_f64(duration)),
-                ("delay", JsValue::from_f64(delay)),
-                ("easing", o.easing().into()),
+                ("duration", JsValue::from_f64(duration.get())),
+                ("delay", JsValue::from_f64(delay.get())),
+                ("easing", o.easing().to_string().into()),
                 ("fill", "both".into()),
             ]
             .iter()
@@ -79,7 +81,7 @@ impl Motion {
                 .and_then(|p| p.dyn_into::<js_sys::Promise>().ok())
                 .map_or_else(|| Box::pin(async {}) as Pin<Box<dyn Future<Output = ()>>>, |p| Box::pin(Settle::new(&p)));
             Box::pin(async move {
-                Race::new(finished, Self::wait(delay + duration + 60.0)).await;
+                First::new(finished, Self::wait(delay + duration + Ms::new(60.0))).await;
                 if !o.keeps() {
                     Self::call(&a, "cancel", &[]);
                 }
@@ -96,7 +98,7 @@ impl Motion {
             .unwrap_or(JsValue::UNDEFINED)
     }
 
-    fn translate(dx: f64, dy: f64) -> JsValue {
+    fn translate(dx: Px, dy: Px) -> JsValue {
         JsValue::from_str(&format!("translate({dx}px, {dy}px)"))
     }
 
@@ -105,7 +107,7 @@ impl Motion {
         Self::tween(
             el,
             &[&[("opacity", 0.into())], &[("opacity", 1.into())]],
-            o.over(Tween::default().ease(Ease::ENTER)),
+            o.over(Tween::default().ease(Ease::Enter)),
         )
     }
 
@@ -118,15 +120,15 @@ impl Motion {
         let fade = Self::tween(
             el,
             &[&[("opacity", JsValue::from_str(&from))], &[("opacity", 0.into())]],
-            o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::EXIT)).keep(),
+            o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::Exit)).keep(),
         );
         let el = el.clone();
         Self::seq(vec![fade, Self::act(move || el.remove())])
     }
 
     /// Play back from an offset to where layout put it (FLIP).
-    pub fn slide(el: &Element, dx: f64, dy: f64, o: Tween) -> Self {
-        if dx.abs() < 0.5 && dy.abs() < 0.5 {
+    pub fn slide(el: &Element, dx: Px, dy: Px, o: Tween) -> Self {
+        if dx.still() && dy.still() {
             return Self::none();
         }
         Self::tween(
@@ -160,12 +162,12 @@ impl Motion {
         Self::tween(
             path,
             &[&[("strokeDashoffset", 1.into())], &[("strokeDashoffset", 0.into())]],
-            o.over(Tween::default().ease(Ease::ENTER)),
+            o.over(Tween::default().ease(Ease::Enter)),
         )
     }
 
     /// Travel in a straight line by (dx, dy) and stay there.
-    pub fn fly(el: &Element, dx: f64, dy: f64, o: Tween) -> Self {
+    pub fn fly(el: &Element, dx: Px, dy: Px, o: Tween) -> Self {
         Self::tween(
             el,
             &[
@@ -178,7 +180,7 @@ impl Motion {
 
     /// `a` fades out while `b` fades in; both stay.
     pub fn crossfade(a: &Element, b: &Element, o: Tween) -> Self {
-        let o = o.over(Tween::default().ms(Self::BEAT * 0.45).ease(Ease::EXIT)).keep();
+        let o = o.over(Tween::default().ms(Self::BEAT * 0.45).ease(Ease::Exit)).keep();
         Self::all(vec![
             Self::tween(a, &[&[("opacity", 1.into())], &[("opacity", 0.into())]], o),
             Self::tween(b, &[&[("opacity", 0.into())], &[("opacity", 1.into())]], o),
@@ -207,8 +209,8 @@ impl Motion {
     }
 
     /// Start `m` after a delay.
-    pub fn after(ms: f64, m: Motion) -> Self {
-        if ms <= 0.0 {
+    pub fn after(ms: Ms, m: Motion) -> Self {
+        if ms <= Ms::ZERO {
             return m;
         }
         Self::new(move |clock| {
@@ -220,11 +222,11 @@ impl Motion {
     }
 
     /// Play together, each one `gap` later than the one before; a gap in the list still counts.
-    pub fn stagger(gap: f64, ms: Vec<Option<Motion>>) -> Self {
+    pub fn stagger(gap: Ms, ms: Vec<Option<Motion>>) -> Self {
         Self::all(
             ms.into_iter()
                 .enumerate()
-                .filter_map(|(i, m)| m.map(|m| Self::after(i as f64 * gap, m)))
+                .filter_map(|(i, m)| m.map(|m| Self::after(gap * i as f64, m)))
                 .collect(),
         )
     }

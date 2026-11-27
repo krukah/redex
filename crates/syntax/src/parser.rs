@@ -9,14 +9,14 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn parse(src: &str) -> Result<Term, String> {
+    pub fn parse(src: &str) -> Result<Term, Failure> {
         let mut p = Self {
             toks: Lexer::tokens(src)?,
             k: 0,
         };
         let t = p.term()?;
         match p.peek() {
-            Some(tk) => Err(format!("Unexpected “{}” after the term.", tk.text())),
+            Some(tk) => Err(Failure::new(format!("Unexpected “{}” after the term.", tk.text()))),
             None => Ok(t),
         }
     }
@@ -31,24 +31,24 @@ impl Parser {
         tk
     }
 
-    fn expect(&mut self, kind: &str) -> Result<Token, String> {
+    fn expect(&mut self, kind: &str) -> Result<Token, Failure> {
         match self.next() {
             Some(x) if x.kind() == kind => Ok(x),
-            Some(x) => Err(format!("Expected “{kind}” before “{}”.", x.text())),
-            None => Err(format!("Expected “{kind}” at the end.")),
+            Some(x) => Err(Failure::new(format!("Expected “{kind}” before “{}”.", x.text()))),
+            None => Err(Failure::new(format!("Expected “{kind}” at the end."))),
         }
     }
 
-    fn term(&mut self) -> Result<Term, String> {
+    fn term(&mut self) -> Result<Term, Failure> {
         match self.peek() {
-            None => Err("The term ends too early.".to_string()),
+            None => Err(Failure::from("The term ends too early.")),
             Some(Token::Lambda) => self.lambda(),
             Some(Token::Let) => self.local(),
             Some(_) => self.apply(),
         }
     }
 
-    fn lambda(&mut self) -> Result<Term, String> {
+    fn lambda(&mut self) -> Result<Term, Failure> {
         self.next();
         let mut xs = Vec::new();
         while let Some(Token::Id(x)) = self.peek().cloned() {
@@ -56,18 +56,17 @@ impl Parser {
             xs.push(x);
         }
         if xs.is_empty() {
-            return Err("Write a variable after λ.".to_string());
+            return Err(Failure::from("Write a variable after λ."));
         }
         match self.next() {
-            Some(Token::Punct('.') | Token::Arrow) => Ok(xs
-                .iter()
-                .rev()
-                .try_fold(self.term()?, |b, x| Ok::<Term, String>(Term::lam(x, b)))?),
-            _ => Err("Write “.” or “=>” after the binders.".to_string()),
+            Some(Token::Punct('.') | Token::Arrow) => {
+                Ok(xs.into_iter().rev().fold(self.term()?, |b, x| Term::lam(x, b)))
+            }
+            _ => Err(Failure::from("Write “.” or “=>” after the binders.")),
         }
     }
 
-    fn local(&mut self) -> Result<Term, String> {
+    fn local(&mut self) -> Result<Term, Failure> {
         self.next();
         let Token::Id(x) = self.expect("id")? else {
             unreachable!("expect checks the kind")
@@ -75,12 +74,12 @@ impl Parser {
         self.expect(":=")?;
         let v = self.term()?;
         match self.next() {
-            Some(Token::Punct(';') | Token::In) => Ok(Term::local(&x, v, self.term()?)),
-            _ => Err("Write “;” after the let value.".to_string()),
+            Some(Token::Punct(';') | Token::In) => Ok(Term::local(x, v, self.term()?)),
+            _ => Err(Failure::from("Write “;” after the let value.")),
         }
     }
 
-    fn apply(&mut self) -> Result<Term, String> {
+    fn apply(&mut self) -> Result<Term, Failure> {
         let mut f = self.postfix()?;
         while self.peek().is_some_and(Token::starts_atom) {
             f = Term::app(f, self.postfix()?);
@@ -91,7 +90,7 @@ impl Parser {
         }
     }
 
-    fn postfix(&mut self) -> Result<Term, String> {
+    fn postfix(&mut self) -> Result<Term, Failure> {
         let mut a = self.atom()?;
         while let Some(Token::Proj(i)) = self.peek().cloned() {
             self.next();
@@ -100,22 +99,20 @@ impl Parser {
         Ok(a)
     }
 
-    fn atom(&mut self) -> Result<Term, String> {
+    fn atom(&mut self) -> Result<Term, Failure> {
         match self.next() {
-            None => Err("The term ends too early.".to_string()),
-            Some(Token::Id(v)) => Ok(Term::var(&v)),
-            Some(Token::Num(v)) if v > 40.0 => {
-                Err("Keep numerals at 40 or below; each one is a chain of succ.".to_string())
+            None => Err(Failure::from("The term ends too early.")),
+            Some(Token::Id(v)) => Ok(Term::var(v)),
+            Some(Token::Num(v)) if v > Nat::MAX.get() as f64 => {
+                Err(Failure::from("Keep numerals at 40 or below; each one is a chain of succ."))
             }
-            Some(Token::Num(v)) => {
-                Ok((0..v as usize).fold(Term::cons("zero"), |t, _| Term::app(Term::cons("succ"), t)))
-            }
+            Some(Token::Num(v)) => Ok(Term::numeral(Nat::new(v as usize))),
             Some(Token::Punct('(')) => self.tuple(),
-            Some(tk) => Err(format!("Unexpected “{}”.", tk.text())),
+            Some(tk) => Err(Failure::new(format!("Unexpected “{}”.", tk.text()))),
         }
     }
 
-    fn tuple(&mut self) -> Result<Term, String> {
+    fn tuple(&mut self) -> Result<Term, Failure> {
         let mut items = vec![self.term()?];
         while self.peek() == Some(&Token::Punct(',')) {
             self.next();

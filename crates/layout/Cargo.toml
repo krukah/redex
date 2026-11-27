@@ -9,15 +9,17 @@ publish.workspace      = true
 description  = "Pure geometry for the graph and its thumbnails"
 
 [dependencies]
-term = { workspace = true }
-rules = { workspace = true }
+units    = { workspace = true }
+term     = { workspace = true }
+rules    = { workspace = true }
 strategy = { workspace = true }
-explore = { workspace = true }
-
-[lints]
-workspace = true
+explore  = { workspace = true }
+markup   = { workspace = true }
 
 [dev-dependencies]
 syntax     = { workspace = true }
 examples   = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

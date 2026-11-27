@@ -12,31 +12,43 @@ impl Term {
         Self(Rc::new(Node::new(Uid::next(), shape)))
     }
 
-    pub fn var(n: &str) -> Self {
-        Self::make(Shape::Var(n.to_string()))
+    pub fn var<N>(n: N) -> Self
+    where
+        N: Into<Name>,
+    {
+        Self::make(Shape::Var(n.into()))
     }
 
-    pub fn cons(n: &str) -> Self {
-        Self::make(Shape::Const(n.to_string()))
+    pub fn cons<N>(n: N) -> Self
+    where
+        N: Into<Name>,
+    {
+        Self::make(Shape::Const(n.into()))
     }
 
-    pub fn lam(x: &str, b: Term) -> Self {
-        Self::make(Shape::Lam(x.to_string(), b))
+    pub fn lam<N>(x: N, b: Term) -> Self
+    where
+        N: Into<Name>,
+    {
+        Self::make(Shape::Lam(x.into(), b))
     }
 
     pub fn app(f: Term, a: Term) -> Self {
         Self::make(Shape::App(f, a))
     }
 
-    pub fn local(x: &str, v: Term, b: Term) -> Self {
-        Self::make(Shape::Let(x.to_string(), v, b))
+    pub fn local<N>(x: N, v: Term, b: Term) -> Self
+    where
+        N: Into<Name>,
+    {
+        Self::make(Shape::Let(x.into(), v, b))
     }
 
     pub fn pair(a: Term, b: Term) -> Self {
         Self::make(Shape::Pair(a, b))
     }
 
-    pub fn proj(i: u8, t: Term) -> Self {
+    pub fn proj(i: Field, t: Term) -> Self {
         Self::make(Shape::Proj(i, t))
     }
 
@@ -53,10 +65,6 @@ impl Term {
 
     pub fn flagged(self, renamed: bool) -> Self {
         if renamed { self.marked(Mark::Binder) } else { self }
-    }
-
-    pub fn node(&self) -> &Node {
-        &self.0
     }
 
     pub fn uid(&self) -> Uid {
@@ -92,7 +100,7 @@ impl Term {
     }
 
     /// The bound name of a λ or let.
-    pub fn binder(&self) -> Option<&str> {
+    pub fn binder(&self) -> Option<&Name> {
         match self.shape() {
             Shape::Lam(x, _) | Shape::Let(x, ..) => Some(x),
             _ => None,
@@ -100,36 +108,36 @@ impl Term {
     }
 
     /// The name of a variable or constant.
-    pub fn name(&self) -> Option<&str> {
+    pub fn name(&self) -> Option<&Name> {
         match self.shape() {
             Shape::Var(n) | Shape::Const(n) => Some(n),
             _ => None,
         }
     }
 
-    pub fn is_const(&self, n: &str) -> bool {
-        matches!(self.shape(), Shape::Const(c) if c == n)
+    pub fn is_prim(&self, p: Prim) -> bool {
+        matches!(self.shape(), Shape::Const(c) if c.prim() == Some(p))
     }
 
     /// A deep copy whose every node records the node it copies.
     pub fn copy(&self) -> Self {
         match self.shape() {
-            Shape::Var(n) => Self::var(n),
-            Shape::Const(n) => Self::cons(n),
-            Shape::Lam(x, b) => Self::lam(x, b.copy()),
+            Shape::Var(n) => Self::var(n.clone()),
+            Shape::Const(n) => Self::cons(n.clone()),
+            Shape::Lam(x, b) => Self::lam(x.clone(), b.copy()),
             Shape::App(f, a) => Self::app(f.copy(), a.copy()),
-            Shape::Let(x, v, b) => Self::local(x, v.copy(), b.copy()),
+            Shape::Let(x, v, b) => Self::local(x.clone(), v.copy(), b.copy()),
             Shape::Pair(a, b) => Self::pair(a.copy(), b.copy()),
             Shape::Proj(i, t) => Self::proj(*i, t.copy()),
         }
         .derived(self)
     }
 
-    pub fn size(&self) -> usize {
-        1 + self.kids().iter().map(|(_, k)| k.size()).sum::<usize>()
+    pub fn size(&self) -> Size {
+        Size::ONE + self.kids().iter().map(|(_, k)| k.size()).sum()
     }
 
-    pub fn fv(&self) -> HashSet<String> {
+    pub fn fv(&self) -> HashSet<Name> {
         match self.shape() {
             Shape::Var(n) => HashSet::from([n.clone()]),
             Shape::Const(_) => HashSet::new(),
@@ -140,28 +148,28 @@ impl Term {
     }
 
     /// Every variable and binder name in the term.
-    pub fn names(&self) -> HashSet<String> {
+    pub fn names(&self) -> HashSet<Name> {
         self.name()
             .filter(|_| matches!(self.shape(), Shape::Var(_)))
             .or(self.binder())
-            .map(ToString::to_string)
+            .cloned()
             .into_iter()
             .chain(self.kids().iter().flat_map(|(_, k)| k.names()))
             .collect()
     }
 
     /// The α-equivalence key: the term with de Bruijn indices.
-    pub fn key(&self) -> String {
-        self.keyed(&mut Vec::new())
+    pub fn key(&self) -> Key {
+        Key::new(self.keyed(&mut Vec::new()))
     }
 
-    fn keyed(&self, ctx: &mut Vec<String>) -> String {
+    fn keyed(&self, ctx: &mut Vec<Name>) -> String {
         match self.shape() {
             Shape::Var(n) => match ctx.iter().rposition(|y| y == n) {
                 Some(i) => format!("#{}", ctx.len() - 1 - i),
                 None => format!("${n}"),
             },
-            Shape::Const(n) => n.clone(),
+            Shape::Const(n) => n.to_string(),
             Shape::Lam(x, b) => format!("λ({})", Self::under(ctx, x, b)),
             Shape::App(f, a) => format!("@({},{})", f.keyed(ctx), a.keyed(ctx)),
             Shape::Let(x, v, b) => format!("L({},{})", v.keyed(ctx), Self::under(ctx, x, b)),
@@ -170,27 +178,32 @@ impl Term {
         }
     }
 
-    fn under(ctx: &mut Vec<String>, x: &str, b: &Term) -> String {
-        ctx.push(x.to_string());
+    fn under(ctx: &mut Vec<Name>, x: &Name, b: &Term) -> String {
+        ctx.push(x.clone());
         let s = b.keyed(ctx);
         ctx.pop();
         s
     }
 
     /// The numeral this term spells with `succ` and `zero`, if any.
-    pub fn nat(&self) -> Option<usize> {
+    pub fn nat(&self) -> Option<Nat> {
         match self.shape() {
-            Shape::Const(n) if n == "zero" => Some(0),
-            Shape::App(f, a) if f.is_const("succ") => a.nat().map(|n| n + 1),
+            Shape::Const(n) if n.prim() == Some(Prim::Zero) => Some(Nat::ZERO),
+            Shape::App(f, a) if f.is_prim(Prim::Succ) => a.nat().map(Nat::succ),
             _ => None,
         }
+    }
+
+    /// The numeral `n`: `succ` applied `n` times to `zero`, built innermost first.
+    pub fn numeral(n: Nat) -> Self {
+        (0..n.get()).fold(Self::cons(Prim::Zero), |t, _| Self::app(Self::cons(Prim::Succ), t))
     }
 
     /// `zero` or `succ _`.
     pub fn is_ctor(&self) -> bool {
         match self.shape() {
-            Shape::Const(n) => n == "zero",
-            Shape::App(f, _) => f.is_const("succ"),
+            Shape::Const(n) => n.prim() == Some(Prim::Zero),
+            Shape::App(f, _) => f.is_prim(Prim::Succ),
             _ => false,
         }
     }
@@ -200,7 +213,7 @@ impl Term {
         let Shape::App(fff, n) = self.shape() else { return None };
         let Shape::App(ff, s) = fff.shape() else { return None };
         let Shape::App(f, z) = ff.shape() else { return None };
-        f.is_const("Nat.rec").then_some((z, s, n))
+        f.is_prim(Prim::Rec).then_some((z, s, n))
     }
 
     pub fn at(&self, path: &Path) -> Option<&Term> {
@@ -240,10 +253,10 @@ impl Term {
     }
 
     /// One line per term, ids relative to `base`: the format of `fixtures/engine`.
-    pub fn dump(&self, base: u64) -> String {
-        let rel = |u: Uid| u.get() as i64 - base as i64;
+    pub fn dump(&self, base: Uid) -> String {
+        let rel = |u: Uid| u.since(base);
         let label = match self.shape() {
-            Shape::Var(n) | Shape::Const(n) | Shape::Lam(n, _) | Shape::Let(n, ..) => n.clone(),
+            Shape::Var(n) | Shape::Const(n) | Shape::Lam(n, _) | Shape::Let(n, ..) => n.to_string(),
             Shape::Proj(i, _) => i.to_string(),
             Shape::App(..) | Shape::Pair(..) => String::new(),
         };

@@ -10,12 +10,12 @@ pub struct Run {
 }
 
 impl Run {
-    const BIG: usize = 1500;
+    const BIG: Size = Size::new(1500);
 
-    pub fn new(start: &Term, env: &Env, strategy: Strategy, cap: usize) -> Self {
+    pub fn new(start: &Term, env: &Env, strategy: Strategy, cap: Cap) -> Self {
         let mut rows = vec![Row::new(start.clone(), None)];
         let mut t = start.clone();
-        for _ in 0..cap {
+        for _ in 0..cap.get() {
             let Some(r) = strategy.next(&t, env) else {
                 return Self {
                     rows,
@@ -43,8 +43,9 @@ impl Run {
         self.status
     }
 
-    pub fn steps(&self) -> usize {
-        self.rows.len() - 1
+    /// Steps taken: one fewer than the terms passed through.
+    pub fn steps(&self) -> Step {
+        Step::new(self.rows.len() - 1)
     }
 
     pub fn last(&self) -> &Term {

@@ -27,7 +27,7 @@ fn every_thumbnail_and_fate_matches_the_js_deck() {
     Example::MORE.iter().for_each(|e| {
         let p = Program::parse(e.src()).expect("parses");
         let t = Thumb::new(p.term(), p.env(), e.eta());
-        assert!(deck.0.contains(t.svg()), "{}: {}", e.id(), t.svg());
+        assert!(deck.0.contains(&t.svg().to_string()), "{}: {}", e.id(), t.svg());
         assert!(deck.0.contains(&format!("<span class=\"rdx-sub\">{}</span>", t.fate())), "{}: {}", e.id(), t.fate());
     });
 }

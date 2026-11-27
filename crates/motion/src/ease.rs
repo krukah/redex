@@ -1,11 +1,20 @@
 /// Easing curves, by role.
-pub struct Ease;
-
-impl Ease {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ease {
     /// Ease-in-out, a little quicker to start than to stop; for travel and layout.
-    pub const MOVE: &'static str = "cubic-bezier(.45, 0, .2, 1)";
+    Move,
     /// Decelerate; things arriving.
-    pub const ENTER: &'static str = "cubic-bezier(0, 0, .2, 1)";
+    Enter,
     /// Ease-in-out over opacity; a fade that neither pops nor lingers.
-    pub const EXIT: &'static str = "cubic-bezier(.4, 0, .6, 1)";
+    Exit,
+}
+
+impl std::fmt::Display for Ease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Move => "cubic-bezier(.45, 0, .2, 1)",
+            Self::Enter => "cubic-bezier(0, 0, .2, 1)",
+            Self::Exit => "cubic-bezier(.4, 0, .6, 1)",
+        })
+    }
 }

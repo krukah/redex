@@ -1,193 +1,209 @@
+use markup::*;
 use rules::*;
 use term::*;
 
-use crate::*;
+/// How many boxes enclose a node: boxes alternate their background by it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Level(usize);
 
-/// The nested-block view of a term, as markup. Each node is one element carrying its path and uid:
-/// λ and let are boxes with a binder tab tinted by the binder's hue; an application spine is one box
-/// with the head first; a pair is a box; a variable is a tag in its binder's hue (free ones dashed);
-/// a constant is a bold word. With `live`, a redex gets a rule badge on its corner.
+impl Level {
+    pub fn inner(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    pub fn parity(self) -> Class {
+        if self.0 % 2 == 1 { Class::Odd } else { Class::Even }
+    }
+}
+
+/// An enclosing binder: its name, its anchor and its hue.
+#[derive(Debug, Clone)]
+struct Scope {
+    x: Name,
+    anchor: Anchor,
+    hue: Hue,
+}
+
+/// One node's drawing in progress: its classes and attributes, written in the JS order.
+struct Draft {
+    classes: Vec<Class>,
+    attrs: Vec<Attr>,
+}
+
+/// The nested-block view of a term. Each node is one element carrying its path and uid: λ and let
+/// are boxes with a binder tab tinted by the binder's hue; an application spine is one box with
+/// the head first; a pair is a box; a variable is a tag in its binder's hue (free ones dashed); a
+/// constant is a bold word. With `live`, a redex gets a rule badge on its corner.
 pub struct Blocks<'a> {
     env: &'a Env,
     live: bool,
     db: bool,
 }
 
-/// An enclosing binder: its name, its anchor id and its hue.
-struct Scope {
-    x: String,
-    id: usize,
-    hue: u32,
-}
-
 impl<'a> Blocks<'a> {
-    const HUES: u32 = 6;
-
     pub fn new(env: &'a Env, live: bool, db: bool) -> Self {
         Self { env, live, db }
     }
 
-    pub fn html(&self, t: &Term) -> String {
-        self.node(t, &Path::root(), &[], 0, false, &mut 0)
+    pub fn node(&self, t: &Term) -> Node {
+        let mut last = Anchor::NONE;
+        self.draw(t, &Path::root(), &[], Level(0), false, &mut last)
     }
 
-    /// A binder's hue from its name.
-    pub fn hue(name: &str) -> u32 {
-        (name.chars().fold(7u64, |h, c| (h * 31 + c as u64) % (1 << 32)) % u64::from(Self::HUES)) as u32
-    }
-
-    /// `d` is the depth of the nearest enclosing box, for alternating backgrounds; `spine` marks
-    /// the function part of an application.
-    fn node(&self, t: &Term, p: &Path, ctx: &[Scope], d: usize, spine: bool, nid: &mut usize) -> String {
+    /// `spine` marks the function part of an application.
+    fn draw(&self, t: &Term, p: &Path, ctx: &[Scope], d: Level, spine: bool, last: &mut Anchor) -> Node {
         let kind = if self.live { t.redex(self.env) } else { None };
-        let mut cls = vec!["b".to_string()];
-        let mut attrs = format!(
-            " data-path=\"{p}\" data-uid=\"{}\"{}",
-            t.uid(),
-            t.from().map(|f| format!(" data-from=\"{f}\"")).unwrap_or_default()
-        );
+        let mut draft = Draft {
+            classes: vec![Class::Block],
+            attrs: [Attr::Path(p.clone()), Attr::Uid(t.uid())]
+                .into_iter()
+                .chain(t.from().map(Attr::From))
+                .collect(),
+        };
         let (inner, boxed) = match (t.nat(), t.shape()) {
             (Some(n), _) => {
-                cls.push("b-lit".into());
-                (n.to_string(), false)
+                draft.classes.push(Class::Lit);
+                (Node::text(n), false)
             }
-            (None, Shape::Var(n)) => (self.var(n, ctx, &mut cls, &mut attrs), false),
+            (None, Shape::Var(n)) => (self.var(n, ctx, &mut draft), false),
             (None, Shape::Const(n)) => {
-                cls.push("b-const".into());
-                if self.env.has(n) {
-                    cls.push("b-def".into());
-                }
-                (Html::esc(n), false)
+                draft
+                    .classes
+                    .extend([Class::Const].into_iter().chain(self.env.has(n).then_some(Class::Def)));
+                (Node::text(n), false)
             }
-            (None, Shape::Lam(..) | Shape::Let(..)) => (self.binder(t, p, ctx, d, &mut cls, &mut attrs, nid), true),
+            (None, Shape::Lam(..) | Shape::Let(..)) => (self.binder(t, p, ctx, d, &mut draft, last), true),
             (None, Shape::App(f, a)) => {
-                let k = if spine { d } else { d + 1 };
-                cls.push(if spine { "b-grp" } else { "b-app" }.into());
+                let k = if spine { d } else { d.inner() };
+                draft.classes.push(if spine { Class::Group } else { Class::App });
                 (
-                    self.node(f, &p.child('f'), ctx, k, true, nid) + &self.node(a, &p.child('a'), ctx, k, false, nid),
+                    Node::list([
+                        self.draw(f, &p.child('f'), ctx, k, true, last),
+                        self.draw(a, &p.child('a'), ctx, k, false, last),
+                    ]),
                     !spine,
                 )
             }
             (None, Shape::Pair(a, b)) => {
-                cls.push("b-pair".into());
+                draft.classes.push(Class::Pair);
+                let first = self.draw(a, &p.child('a'), ctx, d.inner(), false, last);
                 (
-                    self.node(a, &p.child('a'), ctx, d + 1, false, nid)
-                        + "<span class=\"rp\">,</span>"
-                        + &self.node(b, &p.child('b'), ctx, d + 1, false, nid),
+                    Node::list([
+                        first,
+                        Node::el(Tag::Span).class([Class::Comma]).kid(Node::text(",")),
+                        self.draw(b, &p.child('b'), ctx, d.inner(), false, last),
+                    ]),
                     true,
                 )
             }
             (None, Shape::Proj(i, s)) => {
-                cls.push("b-proj".into());
-                (self.node(s, &p.child('t'), ctx, d, false, nid) + &format!("<span class=\"bj\">.{i}</span>"), false)
+                draft.classes.push(Class::Proj);
+                (
+                    Node::list([
+                        self.draw(s, &p.child('t'), ctx, d, false, last),
+                        Node::el(Tag::Span)
+                            .class([Class::Field])
+                            .kid(Node::text(format!(".{i}"))),
+                    ]),
+                    false,
+                )
             }
         };
-        if boxed {
-            cls.push(if d % 2 == 1 { "odd" } else { "even" }.into());
-        }
-        if let Some(k) = kind {
-            cls.push("rr".into());
-            cls.push(format!("k-{}", k.class()));
-            attrs += &format!(" data-kind=\"{}\"", k.name());
-        }
-        if let Some(m) = t.mark().filter(|m| *m != Mark::Binder) {
-            cls.push("fl".into());
-            cls.push(m.name().into());
-        }
-        if t.cap() {
-            cls.push("cap".into());
-        }
-        let badge = kind
-            .map(|k| {
-                format!(
-                    "<button type=\"button\" class=\"rm k-{}\" aria-label=\"Fire {}\">{}</button>",
-                    k.class(),
-                    k.name(),
-                    k.glyph()
-                )
-            })
-            .unwrap_or_default();
-        format!("<span class=\"{}\"{attrs}>{badge}{inner}</span>", cls.join(" "))
+        let Draft { mut classes, mut attrs } = draft;
+        classes.extend(boxed.then(|| d.parity()));
+        classes.extend(kind.map(|k| [Class::Rr, Class::Ink(k)]).into_iter().flatten());
+        attrs.extend(kind.map(Attr::Kind));
+        classes.extend(
+            t.mark()
+                .filter(|m| *m != Mark::Binder)
+                .map(|m| [Class::Flash, Class::Flashed(m)])
+                .into_iter()
+                .flatten(),
+        );
+        classes.extend(t.cap().then_some(Class::Cap));
+        let badge = kind.map(|k| {
+            Node::el(Tag::Button)
+                .attr(Attr::Button)
+                .class([Class::Badge, Class::Ink(k)])
+                .attr(Attr::Label(format!("Fire {k}")))
+                .kid(Node::text(k.glyph()))
+        });
+        let el = Node::el(Tag::Span).class(classes);
+        attrs.into_iter().fold(el, Node::attr).kids(badge).kid(inner)
     }
 
-    fn var(&self, n: &str, ctx: &[Scope], cls: &mut Vec<String>, attrs: &mut String) -> String {
-        match ctx.iter().rposition(|s| s.x == n) {
+    fn var(&self, n: &Name, ctx: &[Scope], draft: &mut Draft) -> Node {
+        match ctx.iter().rposition(|s| s.x == *n) {
             None => {
-                cls.extend(["b-var".into(), "b-free".into()]);
-                Html::esc(n)
+                draft.classes.extend([Class::Bound, Class::Free]);
+                Node::text(n)
             }
             Some(j) => {
-                cls.extend(["b-var".into(), format!("h{}", ctx[j].hue)]);
-                if self.db {
-                    cls.push("b-ix".into());
-                }
-                *attrs += &format!(" data-bid=\"{}\"", ctx[j].id);
-                if self.db { (ctx.len() - 1 - j).to_string() } else { Html::esc(n) }
+                draft.classes.extend(
+                    [Class::Bound, Class::Hue(ctx[j].hue)]
+                        .into_iter()
+                        .chain(self.db.then_some(Class::Index)),
+                );
+                draft.attrs.push(Attr::Bid(ctx[j].anchor));
+                if self.db { Node::text(ctx.len() - 1 - j) } else { Node::text(n) }
             }
         }
     }
 
-    fn binder(
-        &self,
-        t: &Term,
-        p: &Path,
-        ctx: &[Scope],
-        d: usize,
-        cls: &mut Vec<String>,
-        attrs: &mut String,
-        nid: &mut usize,
-    ) -> String {
-        *nid += 1;
-        let (id, x) = (*nid, t.binder().unwrap_or_default());
-        let hue = Self::hue(x);
-        cls.extend([
-            if matches!(t.shape(), Shape::Lam(..)) { "b-lam" } else { "b-let" }.to_string(),
-            format!("h{hue}"),
+    fn binder(&self, t: &Term, p: &Path, ctx: &[Scope], d: Level, draft: &mut Draft, last: &mut Anchor) -> Node {
+        *last = last.next();
+        let (anchor, x) = (*last, t.binder().cloned().unwrap_or_else(|| Name::from("")));
+        let hue = Hue::of(&x);
+        draft.classes.extend([
+            if matches!(t.shape(), Shape::Lam(..)) { Class::Lam } else { Class::Let },
+            Class::Hue(hue),
         ]);
-        *attrs += &format!(" data-binder=\"{id}\"");
-        let fl = if t.mark() == Some(Mark::Binder) { " fl fl-alpha" } else { "" };
+        draft.attrs.push(Attr::Binder(anchor));
+        let flashed = if t.mark() == Some(Mark::Binder) {
+            vec![Class::Flash, Class::Flashed(Mark::Renamed)]
+        } else {
+            vec![]
+        };
         let name = match (self.db, self.live) {
-            (true, _) => String::new(),
-            (false, true) => format!(
-                "<button type=\"button\" class=\"rb{fl}\" data-path=\"{p}\" data-anchor=\"{id}\" title=\"Rename (α)\">{}</button>",
-                Html::esc(x)
-            ),
-            (false, false) => format!("<span class=\"rb\" data-anchor=\"{id}\">{}</span>", Html::esc(x)),
+            (true, _) => Node::none(),
+            (false, true) => Node::el(Tag::Button)
+                .attr(Attr::Button)
+                .class([Class::Binder].into_iter().chain(flashed))
+                .attr(Attr::Path(p.clone()))
+                .attr(Attr::Anchor(anchor))
+                .attr(Attr::Title("Rename (α)".to_string()))
+                .kid(Node::text(&x)),
+            (false, false) => Node::el(Tag::Span)
+                .class([Class::Binder])
+                .attr(Attr::Anchor(anchor))
+                .kid(Node::text(&x)),
         };
         let kw = |s: &str| {
-            format!(
-                "<span class=\"rk\"{}>{s}</span>",
-                if self.db { format!(" data-anchor=\"{id}\"") } else { String::new() }
-            )
+            let k = Node::el(Tag::Span).class([Class::Keyword]);
+            (if self.db { k.attr(Attr::Anchor(anchor)) } else { k }).kid(Node::text(s))
         };
         let inside = ctx
             .iter()
-            .map(|s| Scope {
-                x: s.x.clone(),
-                id: s.id,
-                hue: s.hue,
-            })
-            .chain([Scope {
-                x: x.to_string(),
-                id,
-                hue,
-            }])
+            .cloned()
+            .chain([Scope { x, anchor, hue }])
             .collect::<Vec<Scope>>();
+        let tab = Node::el(Tag::Span).class([Class::Tab]);
         match t.shape() {
             Shape::Let(_, v, b) => {
-                let value = self.node(v, &p.child('v'), ctx, d + 1, false, nid);
-                format!(
-                    "<span class=\"bt\">{}{name}<span class=\"rk\">:=</span>{value}</span>{}",
-                    kw("let"),
-                    self.node(b, &p.child('b'), &inside, d + 1, false, nid)
-                )
+                let value = self.draw(v, &p.child('v'), ctx, d.inner(), false, last);
+                Node::list([
+                    tab.kid(kw("let"))
+                        .kid(name)
+                        .kid(Node::el(Tag::Span).class([Class::Keyword]).kid(Node::text(":=")))
+                        .kid(value),
+                    self.draw(b, &p.child('b'), &inside, d.inner(), false, last),
+                ])
             }
-            Shape::Lam(_, b) => format!(
-                "<span class=\"bt\">{}{name}</span>{}",
-                kw("λ"),
-                self.node(b, &p.child('b'), &inside, d + 1, false, nid)
-            ),
-            _ => String::new(),
+            Shape::Lam(_, b) => Node::list([
+                tab.kid(kw("λ")).kid(name),
+                self.draw(b, &p.child('b'), &inside, d.inner(), false, last),
+            ]),
+            _ => Node::none(),
         }
     }
 }

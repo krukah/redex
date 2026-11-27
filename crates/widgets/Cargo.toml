@@ -9,6 +9,8 @@ publish.workspace      = true
 description  = "Leptos widgets: blocks, rules deck, workbench, graph, race, session"
 
 [dependencies]
+units = { workspace = true }
+markup = { workspace = true }
 term = { workspace = true }
 subst = { workspace = true }
 syntax = { workspace = true }

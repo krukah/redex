@@ -26,22 +26,18 @@ impl Number {
         if x < 0.0 { format!("-{rounded}") } else { rounded }
     }
 
-    /// Adds one unit in the last place of a decimal string.
+    /// Adds one unit in the last place of a decimal string. A tie only happens below 2^53, so the
+    /// digits fit a `u128`.
     fn bump(s: &str) -> String {
-        let mut digits = s.chars().rev().collect::<Vec<char>>();
-        let carry = digits.iter_mut().filter(|c| c.is_ascii_digit()).try_for_each(|c| {
-            if *c == '9' {
-                *c = '0';
-                Ok(())
-            } else {
-                *c = (*c as u8 + 1) as char;
-                Err(())
-            }
-        });
-        if carry.is_ok() {
-            digits.push('1');
+        let (int, frac) = s.split_once('.').unwrap_or((s, ""));
+        let n = format!("{int}{frac}").parse::<u128>().unwrap_or(0) + 1;
+        let digits = format!("{n:0width$}", width = int.len() + frac.len());
+        if frac.is_empty() {
+            digits
+        } else {
+            let (whole, part) = digits.split_at(digits.len() - frac.len());
+            format!("{whole}.{part}")
         }
-        digits.into_iter().rev().collect()
     }
 
     fn exponent(x: f64) -> String {

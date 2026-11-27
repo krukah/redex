@@ -349,7 +349,8 @@ impl<'src> Scan<'src> {
             && self
                 .node()
                 .prev_sibling()
-                .and_then(|dot| dot.prev_sibling())
+                .as_ref()
+                .and_then(tree_sitter::Node::prev_sibling)
                 .is_some_and(|receiver| matches!(receiver.kind(), "identifier" | "self" | "token_tree"))
             && !self.node().next_sibling().is_some_and(|next| {
                 matches!(next.kind(), "!" | "::")

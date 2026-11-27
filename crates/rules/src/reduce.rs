@@ -36,7 +36,7 @@ impl Reduce for Term {
                 _ => None,
             },
             Shape::Pair(a, b) => match (a.shape(), b.shape()) {
-                (Shape::Proj(1, p), Shape::Proj(2, q)) if p.key() == q.key() => Some(Kind::EtaS),
+                (Shape::Proj(Field::First, p), Shape::Proj(Field::Second, q)) if p.key() == q.key() => Some(Kind::EtaS),
                 _ => None,
             },
             Shape::Var(_) => None,
@@ -68,7 +68,7 @@ impl Reduce for Term {
                 .and_then(|n| env.get(n))
                 .map_or_else(|| self.clone(), Term::copy),
             Kind::Iota => self.iota(),
-            Kind::Proj if matches!(self.shape(), Shape::Proj(1, _)) => kid("ta").copy(),
+            Kind::Proj if matches!(self.shape(), Shape::Proj(Field::First, _)) => kid("ta").copy(),
             Kind::Proj => kid("tb").copy(),
             Kind::Eta => kid("bf").copy(),
             Kind::EtaS => kid("at").copy(),
@@ -88,7 +88,7 @@ impl Reduce for Term {
                 let m = n.kid('a').expect("succ has an argument");
                 Term::app(
                     Term::app(s.clone(), m.clone()),
-                    Term::app(Term::app(Term::app(Term::cons("Nat.rec"), z.clone()), s.clone()), m.clone()),
+                    Term::app(Term::app(Term::app(Term::cons(Prim::Rec), z.clone()), s.clone()), m.clone()),
                 )
             }
             None => self.clone(),

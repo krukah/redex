@@ -730,11 +730,13 @@ version = "0.1.0"
 dependencies = [
  "examples",
  "explore",
+ "markup",
  "rules",
  "serde_json",
  "strategy",
  "syntax",
  "term",
+ "units",
 ]
 
 [[package]]
@@ -902,6 +904,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "markup"
+version = "0.1.0"
+dependencies = [
+ "examples",
+ "explore",
+ "rules",
+ "strategy",
+ "term",
+ "units",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -913,6 +927,8 @@ version = "0.1.0"
 dependencies = [
  "gloo-timers",
  "js-sys",
+ "markup",
+ "units",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -1456,6 +1472,7 @@ name = "syntax"
 version = "0.1.0"
 dependencies = [
  "term",
+ "units",
 ]
 
 [[package]]
@@ -1493,6 +1510,9 @@ dependencies = [
 [[package]]
 name = "term"
 version = "0.1.0"
+dependencies = [
+ "units",
+]
 
 [[package]]
 name = "thiserror"
@@ -1644,6 +1664,10 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "units"
+version = "0.1.0"
 
 [[package]]
 name = "url"
@@ -1809,6 +1833,7 @@ dependencies = [
  "js-sys",
  "layout",
  "leptos",
+ "markup",
  "motion",
  "rules",
  "serde_json",
@@ -1816,6 +1841,7 @@ dependencies = [
  "subst",
  "syntax",
  "term",
+ "units",
  "wasm-bindgen",
  "web-sys",
 ]

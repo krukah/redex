@@ -1,10 +1,11 @@
 use crate::*;
+use term::*;
 
 /// Turns source text into tokens.
 pub struct Lexer(Vec<char>);
 
 impl Lexer {
-    pub fn tokens(src: &str) -> Result<Vec<Token>, String> {
+    pub fn tokens(src: &str) -> Result<Vec<Token>, Failure> {
         let lexer = Self(src.chars().collect());
         let mut toks = Vec::new();
         let mut i = 0;
@@ -25,7 +26,7 @@ impl Lexer {
     }
 
     fn digit(c: Option<char>) -> bool {
-        c.is_some_and(|c| c.is_ascii_digit())
+        c.as_ref().is_some_and(char::is_ascii_digit)
     }
 
     fn id_start(c: char) -> bool {
@@ -37,7 +38,7 @@ impl Lexer {
     }
 
     /// The token at `i`, if any, and where the next one starts.
-    fn scan(&self, i: usize) -> Result<(Option<Token>, usize), String> {
+    fn scan(&self, i: usize) -> Result<(Option<Token>, usize), Failure> {
         let c = self.0[i];
         match c {
             _ if Line::space(c) => Ok((None, i + 1)),
@@ -52,15 +53,14 @@ impl Lexer {
             '(' | ')' | ',' | ';' => Ok((Some(Token::Punct(c)), i + 1)),
             _ if c.is_ascii_digit() => Ok(self.number(i)),
             _ if Self::id_start(c) => Ok(self.word(i)),
-            _ => Err(format!("Unexpected character “{c}”.")),
+            _ => Err(Failure::new(format!("Unexpected character “{c}”."))),
         }
     }
 
     /// `.1` or `.2` not followed by a digit is a projection; any other `.` is punctuation.
     fn dot(&self, i: usize) -> (Option<Token>, usize) {
-        match (self.at(i + 1), Self::digit(self.at(i + 2))) {
-            (Some('1'), false) => (Some(Token::Proj(1)), i + 2),
-            (Some('2'), false) => (Some(Token::Proj(2)), i + 2),
+        match (self.at(i + 1).and_then(Field::parse), Self::digit(self.at(i + 2))) {
+            (Some(f), false) => (Some(Token::Proj(f)), i + 2),
             _ => (Some(Token::Punct('.')), i + 1),
         }
     }
@@ -85,7 +85,7 @@ impl Lexer {
             "fun" => Token::Lambda,
             "let" => Token::Let,
             "in" => Token::In,
-            _ => Token::Id(w),
+            _ => Token::Id(Name::from(w.as_str())),
         };
         (Some(tok), j)
     }

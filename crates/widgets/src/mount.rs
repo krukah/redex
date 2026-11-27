@@ -1,7 +1,33 @@
+use examples::*;
 use leptos::prelude::*;
+use markup::Selector;
+use markup::*;
 use wasm_bindgen::JsCast;
 
 use crate::*;
+
+/// The widget a host element asks for with `data-redex`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Widget {
+    Rules,
+    Workbench,
+    Graph,
+    Race,
+}
+
+impl std::str::FromStr for Widget {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "rules" => Ok(Self::Rules),
+            "workbench" => Ok(Self::Workbench),
+            "graph" => Ok(Self::Graph),
+            "race" => Ok(Self::Race),
+            _ => Err(()),
+        }
+    }
+}
 
 /// Mounts every `[data-redex]` element in a scope with one shared session.
 pub struct Mount;
@@ -12,38 +38,33 @@ impl Mount {
     pub fn all(scope: &web_sys::Element) -> Session {
         let session = Session::default();
         let stored = StoredValue::new_local(session.clone());
-        let els = scope
-            .query_selector_all("[data-redex]")
-            .map(|list| {
-                (0..list.length())
-                    .filter_map(|i| list.item(i))
-                    .filter_map(|n| n.dyn_into::<web_sys::HtmlElement>().ok())
-                    .collect::<Vec<web_sys::HtmlElement>>()
-            })
-            .unwrap_or_default();
+        let els = Doc::all(scope, &Selector::Has(Data::Redex))
+            .into_iter()
+            .filter_map(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+            .collect::<Vec<web_sys::HtmlElement>>();
         els.iter().for_each(|el| {
-            let kind = el.dataset().get("redex").unwrap_or_default();
-            if !["rules", "workbench", "graph", "race"].contains(&kind.as_str()) {
+            let Some(widget) = Doc::read::<Widget>(el, Data::Redex) else {
                 return;
-            }
-            let _ = el.class_list().add_1("redex");
-            let handle = leptos::mount::mount_to(el.clone(), move || {
+            };
+            Doc::add(el, &[Class::Redex]);
+            leptos::mount::mount_to(el.clone(), move || {
                 provide_context(stored);
-                match kind.as_str() {
-                    "rules" => view! { <Deck/> }.into_any(),
-                    "workbench" => view! { <Workbench/> }.into_any(),
-                    "graph" => view! { <Paths/> }.into_any(),
-                    "race" => view! { <Lanes/> }.into_any(),
-                    _ => ().into_any(),
+                match widget {
+                    Widget::Rules => view! { <Deck/> }.into_any(),
+                    Widget::Workbench => view! { <Workbench/> }.into_any(),
+                    Widget::Graph => view! { <Paths/> }.into_any(),
+                    Widget::Race => view! { <Lanes/> }.into_any(),
                 }
-            });
-            handle.forget();
+            })
+            .forget();
         });
         let first = els
             .iter()
-            .find_map(|el| el.dataset().get("example").filter(|e| !e.is_empty()))
+            .find_map(|el| el.get_attribute(Data::Example.name()).filter(|e| !e.is_empty()))
             .unwrap_or_else(|| "beta".to_string());
-        session.load_example(&first);
+        if let Some(ex) = Example::find(&first) {
+            session.load_example(ex);
+        }
         session
     }
 

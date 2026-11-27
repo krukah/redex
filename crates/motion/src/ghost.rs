@@ -1,3 +1,5 @@
+use markup::*;
+use units::*;
 use wasm_bindgen::JsCast;
 use web_sys::DomRect;
 use web_sys::Element;
@@ -22,13 +24,13 @@ impl Ghost {
 
     /// Pins a copy of `el` centered on `at` (default: where `el` is). `hidden` starts it
     /// transparent, for a copy that will fade in; `mark` goes on the copy's class list.
-    pub fn pin(el: &Element, at: Option<&DomRect>, hidden: bool, mark: &[&str]) -> Option<Element> {
+    pub fn pin(el: &Element, at: Option<&DomRect>, hidden: bool, mark: &[Class]) -> Option<Element> {
         let doc = web_sys::window()?.document()?;
         let r = el.get_bounding_client_rect();
         let (cx, cy) = Self::center(at.unwrap_or(&r));
         let cs = web_sys::window()?.get_computed_style(el).ok().flatten()?;
         let w = doc.create_element("div").ok()?;
-        w.set_class_name("redex rdx-ghost");
+        w.set_class_name(&Attr::Class(vec![Class::Redex, Class::Ghost]).to_string());
         let inherited = Self::INHERITED
             .iter()
             .map(|p| format!("{p}:{}", cs.get_property_value(p).unwrap_or_default()))
@@ -36,8 +38,8 @@ impl Ghost {
             .join(";");
         let css = format!(
             "left:{}px;top:{}px;width:{}px;height:{}px;{inherited}{}",
-            cx - r.width() / 2.0,
-            cy - r.height() / 2.0,
+            cx - Px::new(r.width()) / 2.0,
+            cy - Px::new(r.height()) / 2.0,
             r.width(),
             r.height(),
             if hidden { ";opacity:0" } else { "" }
@@ -46,9 +48,11 @@ impl Ghost {
             let _ = js_sys::Reflect::set(&style, &"cssText".into(), &css.into());
         }
         let copy = el.clone_node_with_deep(true).ok()?.dyn_into::<Element>().ok()?;
-        let _ = copy.class_list().remove_3("hot", "soft", "arriving");
+        [Class::Hot, Class::Soft, Class::Arriving].iter().for_each(|c| {
+            let _ = copy.class_list().remove_1(&c.to_string());
+        });
         mark.iter().for_each(|m| {
-            let _ = copy.class_list().add_1(m);
+            let _ = copy.class_list().add_1(&m.to_string());
         });
         if let Ok(style) =
             js_sys::Reflect::get(&copy, &"style".into()).and_then(JsCast::dyn_into::<web_sys::CssStyleDeclaration>)
@@ -62,12 +66,12 @@ impl Ghost {
         Some(w)
     }
 
-    pub fn center(r: &DomRect) -> (f64, f64) {
-        (r.left() + r.width() / 2.0, r.top() + r.height() / 2.0)
+    pub fn center(r: &DomRect) -> (Px, Px) {
+        (Px::new(r.left() + r.width() / 2.0), Px::new(r.top() + r.height() / 2.0))
     }
 
     /// The offset from rect `a`'s center to rect `b`'s.
-    pub fn delta(a: &DomRect, b: &DomRect) -> (f64, f64) {
+    pub fn delta(a: &DomRect, b: &DomRect) -> (Px, Px) {
         let ((ax, ay), (bx, by)) = (Self::center(a), Self::center(b));
         (bx - ax, by - ay)
     }

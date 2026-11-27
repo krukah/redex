@@ -1,127 +1,157 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use examples::*;
 use leptos::html;
 use leptos::prelude::*;
+use markup::Selector;
+use markup::*;
 use motion::*;
 use rules::*;
 use strategy::*;
 use syntax::*;
+use term::Env;
 use term::*;
+use units::*;
 use web_sys::Element;
 
 use crate::*;
 
-/// One lane of the race: a strategy, its name and what it is like.
+/// One lane of the race: a strategy and what it is like.
 #[derive(Debug, Clone, Copy)]
 pub struct Lane {
-    name: &'static str,
-    sub: &'static str,
     strategy: Strategy,
+    sub: &'static str,
 }
 
 /// The strategy race: one start term, three rules for picking the next redex, side by side.
 pub struct Track;
 
 impl Track {
-    pub const CAP: usize = 24;
-    pub const TICK: u32 = 420;
+    pub const CAP: Cap = Cap::new(24);
+    pub const TICK: Ms = Ms::new(420.0);
+    const FIRST: Ms = Ms::new(350.0);
     pub const LANES: [Lane; 3] = [
         Lane {
-            name: "Normal order",
-            sub: "Leftmost-outermost. Reaches a normal form whenever one exists.",
             strategy: Strategy::Normal,
+            sub: "Leftmost-outermost. Reaches a normal form whenever one exists.",
         },
         Lane {
-            name: "Applicative order",
-            sub: "Leftmost-innermost. Arguments first, like a strict language.",
             strategy: Strategy::Applicative,
+            sub: "Leftmost-innermost. Arguments first, like a strict language.",
         },
         Lane {
-            name: "Head only",
-            sub: "What Lean’s whnf does. Stops once the head is a λ, a constructor or stuck.",
             strategy: Strategy::Whnf,
+            sub: "What Lean’s whnf does. Stops once the head is a λ, a constructor or stuck.",
         },
     ];
 
     /// The start term and its definitions for a pick, if there is one yet.
-    pub fn source(pick: &str, session: &Session) -> Option<(Term, term::Env)> {
-        match examples::Race::find(pick).and_then(|r| r.src()) {
-            None if session.state().hist.is_empty() => None,
+    pub fn source(pick: Race, session: &Session) -> Option<(Term, Env)> {
+        match pick.src() {
+            None if !session.loaded() => None,
             None => Some((session.start(), session.env())),
             Some(src) => Program::parse(src).ok().map(|p| (p.term().clone(), p.env().clone())),
         }
     }
 
-    pub fn runs(src: &(Term, term::Env)) -> Vec<Run> {
+    pub fn runs((term, env): &(Term, Env)) -> Vec<Run> {
         Self::LANES
             .iter()
-            .map(|l| Run::new(&src.0, &src.1, l.strategy, Self::CAP))
+            .map(|l| Run::new(term, env, l.strategy, Self::CAP))
             .collect()
     }
 
-    pub fn count(r: &Run) -> String {
+    pub fn count(r: &Run) -> Node {
         let n = r.steps();
         match r.status() {
-            Status::Done => format!("{n}<small>step{}</small>", if n == 1 { "" } else { "s" }),
-            _ => "∞".to_string(),
+            Status::Done => Node::list([
+                Node::text(n),
+                Node::el(Tag::Small).kid(Node::text(if n == Step::ONE { "step" } else { "steps" })),
+            ]),
+            _ => Node::text("∞"),
         }
     }
 
-    fn ending(r: &Run, env: &term::Env) -> (&'static str, String) {
+    fn ending(r: &Run, env: &Env) -> (Class, String) {
         match r.status() {
-            Status::Cap => ("loops", format!("Still going after {} steps. It loops.", Self::CAP)),
-            Status::Big => ("loops", "Stopped: the term keeps growing.".to_string()),
+            Status::Cap => (Class::Loops, format!("Still going after {} steps. It loops.", Self::CAP)),
+            Status::Big => (Class::Loops, "Stopped: the term keeps growing.".to_string()),
             Status::Done => match r.last().redexes(env).iter().filter(|x| !x.kind().is_eta()).count() {
-                0 => ("nf", "Normal form".to_string()),
-                left => {
-                    ("part", format!("Head exposed. {left} redex{} left inside.", if left > 1 { "es" } else { "" }))
-                }
+                0 => (Class::Nf, "Normal form".to_string()),
+                left => (
+                    Class::Part,
+                    format!("Head exposed. {left} redex{} left inside.", if left > 1 { "es" } else { "" }),
+                ),
             },
         }
     }
 
-    pub fn pills(pick: &str) -> String {
-        examples::Race::ALL
-            .iter()
-            .map(|r| {
-                let on = r.id() == pick;
-                format!(
-                    "<button type=\"button\" class=\"rdx-pill{}\" data-race=\"{}\" aria-pressed=\"{on}\">{}</button>",
-                    if on { " on" } else { "" },
-                    r.id(),
-                    Html::esc(r.label())
-                )
-            })
-            .collect::<Vec<String>>()
-            .concat()
+    pub fn pills(pick: Race) -> Node {
+        Node::list(Race::ALL.iter().map(|r| {
+            let on = *r == pick;
+            Node::el(Tag::Button)
+                .attr(Attr::Button)
+                .class([Class::Pill].into_iter().chain(on.then_some(Class::On)))
+                .attr(Attr::Race(*r))
+                .attr(Attr::Pressed(on))
+                .kid(Node::text(r.label()))
+        }))
     }
 
-    pub fn lanes(runs: &[Run], env: &term::Env) -> String {
-        runs.iter()
-            .zip(Self::LANES)
-            .map(|(r, l)| {
-                let (cls, msg) = Self::ending(r, env);
-                let rows = r
-                    .rows()
-                    .iter()
-                    .enumerate()
-                    .map(|(i, row)| {
-                        let text = Html::esc(&row.term().text());
-                        format!("<li data-i=\"{i}\">{}<code title=\"{text}\">{text}</code></li>", Doc::flat(row.kind()))
-                    })
-                    .collect::<Vec<String>>()
-                    .concat();
-                format!(
-                    "<div class=\"rdx-lane\"><header><div class=\"rdx-lane-top\"><b>{}</b><span class=\"rdx-count\">{}</span></div><p>{}</p></header><ol>{rows}<li class=\"rdx-end {cls}\" data-i=\"{}\">{msg}</li></ol></div>",
-                    l.name,
-                    Self::count(r),
-                    l.sub,
-                    r.rows().len()
+    pub fn lanes(runs: &[Run], env: &Env) -> Node {
+        Node::list(runs.iter().zip(Self::LANES).map(|(r, l)| {
+            let (cls, msg) = Self::ending(r, env);
+            let rows = r.rows().iter().enumerate().map(|(i, row)| {
+                let text = row.term().text();
+                Node::el(Tag::Li)
+                    .attr(Attr::I(Step::new(i)))
+                    .kid(Letter::flat(row.kind()))
+                    .kid(
+                        Node::el(Tag::Code)
+                            .attr(Attr::Title(text.clone()))
+                            .kid(Node::text(text)),
+                    )
+            });
+            let end = Node::el(Tag::Li)
+                .class([Class::End, cls])
+                .attr(Attr::I(Step::new(r.rows().len())))
+                .kid(Node::text(msg));
+            let top = Node::el(Tag::Div)
+                .class([Class::LaneTop])
+                .kid(Node::el(Tag::B).kid(Node::text(l.strategy.label())))
+                .kid(Node::el(Tag::Span).class([Class::Count]).kid(Self::count(r)));
+            Node::el(Tag::Div)
+                .class([Class::Lane])
+                .kid(
+                    Node::el(Tag::Header)
+                        .kid(top)
+                        .kid(Node::el(Tag::P).kid(Node::text(l.sub))),
                 )
-            })
-            .collect::<Vec<String>>()
-            .concat()
+                .kid(Node::el(Tag::Ol).kids(rows).kid(end))
+        }))
+    }
+}
+
+/// The lanes as drawn, and the runs they show, for the ticks that reveal them.
+struct Heat {
+    lanes: Vec<Element>,
+    runs: Vec<Run>,
+}
+
+impl Heat {
+    fn lanes(&self) -> &[Element] {
+        &self.lanes
+    }
+
+    fn runs(&self) -> &[Run] {
+        &self.runs
+    }
+
+    /// The longest lane, in rows: the tick that reveals its end.
+    fn last(&self) -> Step {
+        Step::new(self.runs.iter().map(|r| r.rows().len()).max().unwrap_or(0))
     }
 }
 
@@ -129,84 +159,100 @@ impl Track {
 struct Stand {
     session: Session,
     anchor: NodeRef<html::Div>,
-    pick: RefCell<String>,
+    pick: Cell<Race>,
+    drawn: Cell<bool>,
     timer: RefCell<Option<gloo_timers::callback::Timeout>>,
 }
 
 impl Stand {
-    fn q(&self, sel: &str) -> Option<Element> {
-        self.anchor
-            .get_untracked()
-            .and_then(|a| a.parent_element())
-            .and_then(|r| Doc::q(&r, sel))
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn pick(&self) -> &Cell<Race> {
+        &self.pick
+    }
+
+    fn drawn(&self) -> &Cell<bool> {
+        &self.drawn
+    }
+
+    fn timer(&self) -> &RefCell<Option<gloo_timers::callback::Timeout>> {
+        &self.timer
+    }
+
+    fn q(&self, sel: Class) -> Option<Element> {
+        Doc::above(self.anchor.get_untracked()).and_then(|r| Doc::q(&r, &sel.into()))
     }
 
     fn render(self: &Rc<Self>, animate: bool) {
-        self.timer.borrow_mut().take();
-        let pick = self.pick.borrow().clone();
-        if let Some(pills) = self.q(".rdx-pills") {
-            pills.set_inner_html(&Track::pills(&pick));
+        self.timer().borrow_mut().take();
+        self.drawn().set(true);
+        let pick = self.pick().get();
+        if let Some(pills) = self.q(Class::Pills) {
+            Doc::fill(&pills, &Track::pills(pick));
         }
-        let Some(lanes) = self.q(".rdx-lanes") else { return };
-        let Some(src) = Track::source(&pick, &self.session) else {
-            lanes.set_inner_html("");
+        let Some(lanes) = self.q(Class::Lanes) else { return };
+        let Some(src) = Track::source(pick, self.session()) else {
+            Doc::fill(&lanes, &Node::none());
             return;
         };
         let runs = Track::runs(&src);
-        lanes.set_inner_html(&Track::lanes(&runs, &src.1));
+        Doc::fill(&lanes, &Track::lanes(&runs, &src.1));
         if !animate || !Motion::enabled() {
             return;
         }
-        let els = Doc::all(&lanes, ".rdx-lane");
-        let max = runs.iter().map(|r| r.rows().len()).max().unwrap_or(0);
-        els.iter().for_each(|l| {
-            Doc::all(l, "li")
+        let heat = Heat {
+            lanes: Doc::all(&lanes, &Class::Lane.into()),
+            runs,
+        };
+        heat.lanes().iter().for_each(|l| {
+            Doc::all(l, &Tag::Li.into())
                 .iter()
-                .filter(|li| {
-                    Doc::attr(li, "data-i")
-                        .and_then(|i| i.parse::<usize>().ok())
-                        .unwrap_or(0)
-                        > 0
-                })
-                .for_each(|li| Doc::add(li, &["pending"]));
-            if let Some(c) = Doc::q(l, ".rdx-count") {
-                c.set_text_content(Some("0"));
+                .filter(|li| Doc::read::<Step>(li, Data::I).is_some_and(|i| i > Step::START))
+                .for_each(|li| Doc::add(li, &[Class::Pending]));
+            if let Some(c) = Doc::q(l, &Class::Count.into()) {
+                Doc::fill(&c, &Node::text(Step::START));
             }
         });
-        self.schedule(Rc::new((els, runs)), 1, max, 350);
+        self.schedule(Rc::new(heat), Step::ONE, Track::FIRST);
     }
 
-    fn schedule(self: &Rc<Self>, race: Rc<(Vec<Element>, Vec<Run>)>, i: usize, max: usize, ms: u32) {
+    fn schedule(self: &Rc<Self>, heat: Rc<Heat>, i: Step, after: Ms) {
         let me = self.clone();
-        let timeout = gloo_timers::callback::Timeout::new(ms, move || me.tick(&race, i, max));
-        *self.timer.borrow_mut() = Some(timeout);
+        *self.timer().borrow_mut() =
+            Some(gloo_timers::callback::Timeout::new(after.whole(), move || me.tick(&heat, i)));
     }
 
-    fn tick(self: &Rc<Self>, race: &Rc<(Vec<Element>, Vec<Run>)>, i: usize, max: usize) {
-        race.0.iter().zip(&race.1).for_each(|(l, run)| {
-            if let Some(li) = Doc::q(l, &format!("li[data-i=\"{i}\"]")) {
-                Doc::remove(&li, &["pending"]);
-                leptos::task::spawn_local(Motion::enter(&li, Tween::default().ms(300.0)).play(Clock::default()));
-                if let Some(ol) = Doc::q(l, "ol") {
+    fn tick(self: &Rc<Self>, heat: &Rc<Heat>, i: Step) {
+        heat.lanes().iter().zip(heat.runs()).for_each(|(l, run)| {
+            if let Some(li) = Doc::q(l, &Selector::from(Tag::Li).and(Selector::is(Data::I, &i))) {
+                Doc::remove(&li, &[Class::Pending]);
+                leptos::task::spawn_local(
+                    Motion::enter(&li, Tween::default().ms(Ms::new(300.0))).play(Clock::default()),
+                );
+                if let Some(ol) = Doc::q(l, &Tag::Ol.into()) {
                     ol.set_scroll_top(ol.scroll_height());
                 }
             }
-            if let Some(c) = Doc::q(l, ".rdx-count") {
-                c.set_inner_html(&if i <= run.steps() { i.to_string() } else { Track::count(run) });
+            if let Some(c) = Doc::q(l, &Class::Count.into()) {
+                Doc::fill(&c, &if i <= run.steps() { Node::text(i) } else { Track::count(run) });
             }
         });
-        if i < max {
-            self.schedule(race.clone(), i + 1, max, Track::TICK);
+        if i < heat.last() {
+            self.schedule(heat.clone(), i.next(), Track::TICK);
         }
     }
 
     fn click(self: &Rc<Self>, e: &web_sys::Event) {
         let Some(target) = Doc::target(e) else { return };
-        if let Some(id) = Doc::closest(&target, "[data-race]").and_then(|p| Doc::attr(&p, "data-race")) {
-            *self.pick.borrow_mut() = id;
+        if let Some(race) =
+            Doc::closest(&target, &Selector::Has(Data::Race)).and_then(|p| Doc::read::<Race>(&p, Data::Race))
+        {
+            self.pick().set(race);
             self.render(true);
         }
-        if Doc::closest(&target, "[data-act=\"race\"]").is_some() {
+        if Doc::closest(&target, &Selector::is(Data::Act, &Act::Race)).is_some() {
             self.render(true);
         }
     }
@@ -215,29 +261,34 @@ impl Stand {
 #[component]
 pub fn Lanes() -> impl IntoView {
     let session = expect_context::<StoredValue<Session, LocalStorage>>().get_value();
+    let start = Race::find("dup").expect("the dup race exists");
     let stand = Rc::new(Stand {
         session,
         anchor: NodeRef::new(),
-        pick: RefCell::new("dup".to_string()),
+        pick: Cell::new(start),
+        drawn: Cell::new(false),
         timer: RefCell::new(None),
     });
     let me = stand.clone();
-    stand.session.on(move |e| {
-        if e == Event::Load && *me.pick.borrow() == "bench" {
+    stand.session().on(move |e| {
+        if !me.drawn().get() || (e == Event::Load && me.pick().get().src().is_none()) {
             me.render(false);
         }
     });
-    let initial = Track::source("dup", &stand.session)
-        .map(|src| Track::lanes(&Track::runs(&src), &src.1))
-        .unwrap_or_default();
+    let late = stand.clone();
+    stand.anchor.on_load(move |_| {
+        if !late.drawn().get() {
+            late.render(false);
+        }
+    });
     let (b1, b2) = (stand.clone(), stand.clone());
     view! {
-        <div class="rdx-race-bar" node_ref=stand.anchor on:click=move |e| b1.click(&e)>
-            <div class="rdx-pills" inner_html=Track::pills("dup")></div>
-            <button type="button" class="rdx-btn primary" data-act="race">
+        <div class=Class::RaceBar.to_string() node_ref=stand.anchor on:click=move |e| b1.click(&e)>
+            <div class=Class::Pills.to_string()></div>
+            <button type="button" class=Attr::Class(vec![Class::Btn, Class::Primary]).to_string() data-act=Act::Race.to_string()>
                 "Race"
             </button>
         </div>
-        <div class="rdx-lanes" inner_html=initial on:click=move |e| b2.click(&e)></div>
+        <div class=Class::Lanes.to_string() on:click=move |e| b2.click(&e)></div>
     }
 }

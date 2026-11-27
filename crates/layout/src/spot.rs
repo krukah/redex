@@ -1,23 +1,25 @@
+use units::*;
+
 use crate::*;
 
 /// Where a vertex sits in the plot, and its mark.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Spot {
-    x: f64,
-    y: f64,
+    x: Px,
+    y: Px,
     form: Form,
 }
 
 impl Spot {
-    pub fn new(x: f64, y: f64, form: Form) -> Self {
+    pub fn new(x: Px, y: Px, form: Form) -> Self {
         Self { x, y, form }
     }
 
-    pub fn x(&self) -> f64 {
+    pub fn x(&self) -> Px {
         self.x
     }
 
-    pub fn y(&self) -> f64 {
+    pub fn y(&self) -> Px {
         self.y
     }
 

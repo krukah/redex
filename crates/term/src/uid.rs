@@ -15,8 +15,17 @@ impl Uid {
         })
     }
 
-    pub fn get(self) -> u64 {
-        self.0
+    /// How many ids after `base` this one was made: negative when it is older.
+    pub fn since(self, base: Uid) -> i64 {
+        self.0 as i64 - base.0 as i64
+    }
+}
+
+impl std::str::FromStr for Uid {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map(Self)
     }
 }
 

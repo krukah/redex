@@ -16,6 +16,24 @@ pub enum Strategy {
 impl Strategy {
     pub const ALL: [Strategy; 3] = [Self::Normal, Self::Applicative, Self::Whnf];
 
+    /// The strategy's name in the race lanes and on the graph's route pills.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal order",
+            Self::Applicative => "Applicative order",
+            Self::Whnf => "Head only",
+        }
+    }
+
+    /// The strategy's id in markup (`data-route`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::Applicative => "applicative",
+            Self::Whnf => "whnf",
+        }
+    }
+
     pub fn next(self, t: &Term, env: &Env) -> Option<Redex> {
         match self {
             Self::Normal => t.redexes(env).into_iter().find(|r| !r.kind().is_eta()),
@@ -58,7 +76,7 @@ impl Strategy {
             Shape::Let(..) => Some(Redex::new(hp, Kind::Zeta)),
             Shape::Const(c) if env.has(c) => Some(Redex::new(hp, Kind::Delta)),
             Shape::Proj(..) => Self::head(h, env, &hp),
-            Shape::Const(c) if c == "Nat.rec" && n >= 3 => {
+            Shape::Const(c) if c.prim() == Some(Prim::Rec) && n >= 3 => {
                 let rel = Path::from("f".repeat(n - 3));
                 let arg = t
                     .at(&rel)

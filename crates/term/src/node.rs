@@ -5,7 +5,7 @@ use crate::*;
 /// One node. The shape is fixed; `from`, `mark` and `cap` are decorations the workbench strips
 /// after it first draws them, and history entries share subtrees, so they live in cells.
 #[derive(Debug)]
-pub struct Node {
+pub(crate) struct Node {
     uid: Uid,
     shape: Shape,
     from: Cell<Option<Uid>>,

@@ -26,7 +26,7 @@ impl Fixture {
     }
 
     /// Rewrites every `data-uid` and `data-from` relative to `base`.
-    fn rebase(html: &str, base: u64) -> String {
+    fn rebase(html: &str, base: Uid) -> String {
         ["data-uid=\"", "data-from=\""]
             .iter()
             .fold(html.to_string(), |html, attr| {
@@ -35,7 +35,7 @@ impl Fixture {
                     .map(|(i, part)| match (i, part.split_once('"')) {
                         (0, _) | (_, None) => part.to_string(),
                         (_, Some((n, rest))) => {
-                            format!("{}{}\"{rest}", attr, n.parse::<i64>().expect("an id") - base as i64)
+                            format!("{}{}\"{rest}", attr, n.parse::<Uid>().expect("an id").since(base))
                         }
                     })
                     .collect()
@@ -43,7 +43,7 @@ impl Fixture {
     }
 
     fn check(&self) -> Vec<String> {
-        let base = Term::var("_").uid().get();
+        let base = Term::var("_").uid();
         let prog = Program::parse(self.1["src"].as_str().expect("a source")).expect("parses");
         let (term, env) = (prog.term(), prog.env());
         let want = |v: &Value| v.as_str().expect("markup").to_string();
@@ -51,12 +51,12 @@ impl Fixture {
             (
                 "blocks".to_string(),
                 want(&self.1["blocks"]),
-                Self::rebase(&Blocks::new(env, true, false).html(term), base),
+                Self::rebase(&Blocks::new(env, true, false).node(term).to_string(), base),
             ),
             (
                 "debruijn".to_string(),
                 want(&self.1["debruijn"]),
-                Self::rebase(&Blocks::new(env, true, true).html(term), base),
+                Self::rebase(&Blocks::new(env, true, true).node(term).to_string(), base),
             ),
         ];
         out.extend(
@@ -66,7 +66,7 @@ impl Fixture {
                     (
                         format!("def {n}"),
                         want(&w["blocks"]),
-                        Self::rebase(&Blocks::new(env, false, false).html(b), base),
+                        Self::rebase(&Blocks::new(env, false, false).node(b).to_string(), base),
                     )
                 }),
         );
@@ -89,9 +89,9 @@ impl Fixture {
                         subst::Substitute::naive(&b, &x, &arg);
                     }
                     (
-                        format!("redex {} {}", r.path(), r.kind().name()),
+                        format!("redex {} {}", r.path(), r.kind()),
                         want(&w["blocks"]),
-                        Self::rebase(&Blocks::new(env, true, false).html(&term.step(r, env)), base),
+                        Self::rebase(&Blocks::new(env, true, false).node(&term.step(r, env)).to_string(), base),
                     )
                 }),
         );

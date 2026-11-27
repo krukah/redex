@@ -1,0 +1,20 @@
+[package]
+name         = "markup"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+description  = "A typed tree of HTML and SVG, its selectors, and its one renderer"
+
+[dependencies]
+units    = { workspace = true }
+term     = { workspace = true }
+rules    = { workspace = true }
+strategy = { workspace = true }
+explore  = { workspace = true }
+examples = { workspace = true }
+
+[lints]
+workspace = true

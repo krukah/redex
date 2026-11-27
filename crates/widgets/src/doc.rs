@@ -1,29 +1,21 @@
-use rules::*;
-use term::*;
+use std::str::FromStr;
+
+use markup::*;
+use units::*;
 use wasm_bindgen::JsCast;
 use web_sys::Element;
 
-/// DOM queries shared by the widgets. Every query runs inside a widget's own root.
+/// The DOM, typed: queries by `Selector`, data attributes read back into their types, classes by
+/// `Class`, and markup built into real elements. Every query runs inside a widget's own root.
 pub struct Doc;
 
 impl Doc {
-    /// A page-wide counter for ids that must be unique in the document (SVG marker ids).
-    pub fn next_id() -> u64 {
-        thread_local! {
-            static NEXT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-        }
-        NEXT.with(|n| {
-            n.set(n.get() + 1);
-            n.get()
-        })
+    pub fn q(root: &Element, sel: &Selector) -> Option<Element> {
+        root.query_selector(&sel.to_string()).ok().flatten()
     }
 
-    pub fn q(root: &Element, sel: &str) -> Option<Element> {
-        root.query_selector(sel).ok().flatten()
-    }
-
-    pub fn all(root: &Element, sel: &str) -> Vec<Element> {
-        root.query_selector_all(sel)
+    pub fn all(root: &Element, sel: &Selector) -> Vec<Element> {
+        root.query_selector_all(&sel.to_string())
             .map(|list| {
                 (0..list.length())
                     .filter_map(|i| list.item(i))
@@ -33,8 +25,17 @@ impl Doc {
             .unwrap_or_default()
     }
 
-    pub fn closest(el: &Element, sel: &str) -> Option<Element> {
-        el.closest(sel).ok().flatten()
+    /// The parent element of a node a view holds a reference to.
+    pub fn above<E>(el: Option<E>) -> Option<Element>
+    where
+        E: Into<web_sys::Node>,
+    {
+        let node = el?.into();
+        node.parent_element()
+    }
+
+    pub fn closest(el: &Element, sel: &Selector) -> Option<Element> {
+        el.closest(&sel.to_string()).ok().flatten()
     }
 
     /// The element an event happened on.
@@ -42,24 +43,47 @@ impl Doc {
         e.target().and_then(|t| t.dyn_into::<Element>().ok())
     }
 
-    pub fn attr(el: &Element, name: &str) -> Option<String> {
-        el.get_attribute(name)
+    pub fn read<T>(el: &Element, data: Data) -> Option<T>
+    where
+        T: FromStr,
+    {
+        el.get_attribute(data.name()).and_then(|v| v.parse().ok())
     }
 
-    pub fn add(el: &Element, classes: &[&str]) {
+    pub fn write<T>(el: &Element, data: Data, value: &T)
+    where
+        T: std::fmt::Display,
+    {
+        let _ = el.set_attribute(data.name(), &value.to_string());
+    }
+
+    /// Sets one attribute of the markup vocabulary on a live element.
+    pub fn put(el: &Element, attr: &Attr) {
+        let _ = el.set_attribute(attr.name(), &attr.to_string());
+    }
+
+    pub fn erase(el: &Element, data: Data) {
+        let _ = el.remove_attribute(data.name());
+    }
+
+    pub fn add(el: &Element, classes: &[Class]) {
         classes.iter().for_each(|c| {
-            let _ = el.class_list().add_1(c);
+            let _ = el.class_list().add_1(&c.to_string());
         });
     }
 
-    pub fn remove(el: &Element, classes: &[&str]) {
+    pub fn remove(el: &Element, classes: &[Class]) {
         classes.iter().for_each(|c| {
-            let _ = el.class_list().remove_1(c);
+            let _ = el.class_list().remove_1(&c.to_string());
         });
     }
 
-    pub fn toggle(el: &Element, class: &str, on: bool) {
-        let _ = el.class_list().toggle_with_force(class, on);
+    pub fn toggle(el: &Element, class: Class, on: bool) {
+        let _ = el.class_list().toggle_with_force(&class.to_string(), on);
+    }
+
+    pub fn has(el: &Element, class: Class) -> bool {
+        el.class_list().contains(&class.to_string())
     }
 
     pub fn hide(el: &Element, hidden: bool) {
@@ -73,50 +97,42 @@ impl Doc {
         (0..list.length()).filter_map(|i| list.item(i)).collect()
     }
 
-    /// A rule letter in running UI text (trace, status, race lanes).
-    pub fn flat(kind: Option<Kind>) -> String {
-        match kind {
-            Some(k) => format!("<span class=\"rm flat k-{}\">{}</span>", k.class(), k.glyph()),
-            None => "<span class=\"rm flat k-none\">·</span>".to_string(),
+    /// The element's box, in pixels from the viewport's corner.
+    pub fn top(el: &Element) -> Px {
+        Px::new(el.get_bounding_client_rect().top())
+    }
+
+    /// Replaces an element's children with the markup.
+    pub fn fill(el: &Element, node: &Node) {
+        el.set_text_content(None);
+        if let Some(doc) = el.owner_document() {
+            Self::build(&doc, node).iter().for_each(|n| {
+                let _ = el.append_child(n);
+            });
         }
     }
 
-    /// One arc from each bound occurrence up to its binder. Both ends rise to a shared apex; longer
-    /// links rise higher, never past the ceiling.
-    pub fn arcs(stage: &Element, line: &Element, on: bool) {
-        let Some(svg) = Self::q(stage, ".rdx-arcs") else { return };
-        if !on {
-            svg.set_inner_html("");
-            return;
+    /// The DOM nodes for a piece of markup: elements in their namespace, attributes in writing
+    /// order, text as text nodes.
+    fn build(doc: &web_sys::Document, node: &Node) -> Vec<web_sys::Node> {
+        match node {
+            Node::Text(s) => vec![doc.create_text_node(s).into()],
+            Node::List(nodes) => nodes.iter().flat_map(|n| Self::build(doc, n)).collect(),
+            Node::El(tag, attrs, kids) => {
+                let made = if tag.svg() {
+                    doc.create_element_ns(Some(Tag::SVG), tag.name())
+                } else {
+                    doc.create_element(tag.name())
+                };
+                let Ok(el) = made else { return vec![] };
+                attrs.iter().for_each(|a| {
+                    let _ = el.set_attribute(a.name(), &a.to_string());
+                });
+                kids.iter().flat_map(|k| Self::build(doc, k)).for_each(|k| {
+                    let _ = el.append_child(&k);
+                });
+                vec![el.into()]
+            }
         }
-        let base = stage.get_bounding_client_rect();
-        let ceiling = line.get_bounding_client_rect().top() - base.top() - 30.0;
-        let f = |n: f64| Number::fixed(n, 1);
-        let out = Self::all(line, "[data-bid]")
-            .iter()
-            .filter_map(|v| {
-                let id = Self::attr(v, "data-bid")?;
-                let anchor = Self::q(line, &format!("[data-anchor=\"{id}\"]"))?;
-                let (a, b) = (anchor.get_bounding_client_rect(), v.get_bounding_client_rect());
-                let (x1, x2) = (a.left() + a.width() / 2.0 - base.left(), b.left() + b.width() / 2.0 - base.left());
-                let (y1, y2) = (a.top() - base.top() + 2.0, b.top() - base.top() + 2.0);
-                let apex = ceiling.max(y1.min(y2) - 10.0 - (x2 - x1).abs() * 0.12);
-                let cap = if v.class_list().contains("cap") { " cap" } else { "" };
-                Some(format!(
-                    "<path class=\"rarc{cap}\" data-id=\"{id}\" d=\"M{} {} C{} {} {} {} {} {}\"/><circle class=\"rarc-end{cap}\" data-id=\"{id}\" cx=\"{}\" cy=\"{}\" r=\"2.2\"/>",
-                    f(x1),
-                    f(y1),
-                    f(x1),
-                    f(apex),
-                    f(x2),
-                    f(apex),
-                    f(x2),
-                    f(y2),
-                    f(x2),
-                    f(y2)
-                ))
-            })
-            .collect::<String>();
-        svg.set_inner_html(&out);
     }
 }

@@ -1,9 +1,10 @@
-use std::cell::Ref;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use examples::*;
 use rules::*;
+use strategy::*;
 use syntax::*;
 use term::*;
 
@@ -19,67 +20,118 @@ pub enum Event {
 /// One history entry: a term, the rule that produced it, and a note for the trace.
 #[derive(Debug, Clone)]
 pub struct Entry {
-    pub term: Term,
-    pub kind: Option<Kind>,
-    pub note: Option<String>,
+    term: Term,
+    kind: Option<Kind>,
+    note: Option<Note>,
 }
 
-/// The shared state of every widget on a page.
+impl Entry {
+    pub fn new(term: Term, kind: Option<Kind>, note: Option<Note>) -> Self {
+        Self { term, kind, note }
+    }
+
+    pub fn term(&self) -> &Term {
+        &self.term
+    }
+
+    pub fn kind(&self) -> Option<Kind> {
+        self.kind
+    }
+
+    pub fn note(&self) -> Option<&Note> {
+        self.note.as_ref()
+    }
+}
+
+/// A loaded program and how far through it the reader is.
 #[derive(Debug, Default)]
-pub struct State {
-    /// δ-unfoldable definitions.
-    pub env: Env,
-    /// Comment lines from the source.
-    pub notes: Vec<String>,
-    pub src: String,
-    /// The loaded example, if any.
-    pub ex: Option<String>,
-    /// Whether the example wants η edges in the graph.
-    pub eta: bool,
-    /// `hist[0]` is the start term.
-    pub hist: Vec<Entry>,
-    pub idx: usize,
-    /// The wrong, capturing result of the last renamed β.
-    pub capture: Option<Term>,
-    /// A widget is animating or running a strategy.
-    pub busy: bool,
+struct Program {
+    env: Env,
+    notes: Vec<Note>,
+    src: String,
+    example: Option<Example>,
+    eta: bool,
+    hist: Vec<Entry>,
+    idx: Step,
+    capture: Option<Term>,
 }
 
 /// The session every widget on a page shares. Widgets render from it and call its methods; it
 /// tells them synchronously, in mount order, what changed.
 #[derive(Clone, Default)]
 pub struct Session {
-    state: Rc<RefCell<State>>,
+    program: Rc<RefCell<Program>>,
+    busy: Rc<Cell<bool>>,
     listeners: Rc<RefCell<Vec<Rc<dyn Fn(Event)>>>>,
 }
 
 impl Session {
-    pub fn state(&self) -> Ref<'_, State> {
-        self.state.borrow()
-    }
-
-    pub fn update<F>(&self, f: F)
-    where
-        F: FnOnce(&mut State),
-    {
-        f(&mut self.state.borrow_mut());
-    }
-
     pub fn term(&self) -> Term {
-        let s = self.state();
-        s.hist[s.idx].term.clone()
+        let p = self.program.borrow();
+        p.hist[p.idx.get()].term().clone()
     }
 
     pub fn start(&self) -> Term {
-        self.state().hist[0].term.clone()
+        self.program.borrow().hist[0].term().clone()
     }
 
     pub fn env(&self) -> Env {
-        self.state().env.clone()
+        self.program.borrow().env.clone()
     }
 
+    pub fn notes(&self) -> Vec<Note> {
+        self.program.borrow().notes.clone()
+    }
+
+    /// The source the program was loaded from.
+    pub fn src(&self) -> String {
+        self.program.borrow().src.clone()
+    }
+
+    pub fn example(&self) -> Option<Example> {
+        self.program.borrow().example
+    }
+
+    /// Whether the program wants η edges in the graph.
+    pub fn eta(&self) -> bool {
+        self.program.borrow().eta
+    }
+
+    /// `history()[0]` is the start term.
+    pub fn history(&self) -> Vec<Entry> {
+        self.program.borrow().hist.clone()
+    }
+
+    pub fn loaded(&self) -> bool {
+        !self.program.borrow().hist.is_empty()
+    }
+
+    /// The position in the history.
+    pub fn idx(&self) -> Step {
+        self.program.borrow().idx
+    }
+
+    /// The last position in the history.
+    pub fn last(&self) -> Step {
+        Step::new(self.program.borrow().hist.len().saturating_sub(1))
+    }
+
+    /// The wrong, capturing result of the last renamed β.
+    pub fn capture(&self) -> Option<Term> {
+        self.program.borrow().capture.clone()
+    }
+
+    pub fn set_capture(&self, t: Term) {
+        self.program.borrow_mut().capture = Some(t);
+    }
+
+    /// A widget is animating or running a strategy.
     pub fn busy(&self) -> bool {
-        self.state().busy
+        self.busy.get()
+    }
+
+    pub fn set_busy(&self, busy: bool) {
+        self.busy.set(busy);
     }
 
     pub fn on<F>(&self, f: F)
@@ -89,62 +141,56 @@ impl Session {
         self.listeners.borrow_mut().push(Rc::new(f));
     }
 
-    pub fn emit(&self, e: Event) {
+    fn emit(&self, e: Event) {
         let listeners = self.listeners.borrow().clone();
         listeners.iter().for_each(|f| f(e));
     }
 
     /// Fails with a readable message when the source does not parse.
-    pub fn load(&self, src: &str, id: Option<&str>, eta: bool) -> Result<(), String> {
-        let prog = Program::parse(src)?;
+    pub fn load(&self, src: &str, example: Option<Example>, eta: bool) -> Result<(), Failure> {
+        let prog = syntax::Program::parse(src)?;
         prog.env().iter().for_each(|(name, _)| Consts::add(name));
-        self.update(|s| {
-            *s = State {
-                env: prog.env().clone(),
-                notes: prog.notes().to_vec(),
-                src: src.to_string(),
-                ex: id.map(String::from),
-                eta,
-                hist: vec![Entry {
-                    term: prog.term().clone(),
-                    kind: None,
-                    note: None,
-                }],
-                idx: 0,
-                capture: None,
-                busy: s.busy,
-            };
-        });
+        *self.program.borrow_mut() = Program {
+            env: prog.env().clone(),
+            notes: prog.notes().to_vec(),
+            src: src.to_string(),
+            example,
+            eta,
+            hist: vec![Entry::new(prog.term().clone(), None, None)],
+            idx: Step::START,
+            capture: None,
+        };
         self.emit(Event::Load);
         Ok(())
     }
 
-    pub fn load_example(&self, id: &str) {
-        if let Some(ex) = Example::find(id) {
-            let _ = self.load(ex.src(), Some(id), ex.eta());
-        }
+    pub fn load_example(&self, ex: Example) {
+        let _ = self.load(ex.src(), Some(ex), ex.eta());
     }
 
     pub fn push(&self, entry: Entry) {
-        self.update(|s| {
-            s.hist.truncate(s.idx + 1);
-            s.hist.push(entry);
-            s.idx = s.hist.len() - 1;
-        });
+        {
+            let mut p = self.program.borrow_mut();
+            let keep = p.idx.get() + 1;
+            p.hist.truncate(keep);
+            p.hist.push(entry);
+            p.idx = Step::new(p.hist.len() - 1);
+        }
         self.emit(Event::Step);
     }
 
-    pub fn seek(&self, i: usize) {
-        self.update(|s| s.idx = i);
+    pub fn seek(&self, i: Step) {
+        self.program.borrow_mut().idx = i;
         self.emit(Event::Step);
     }
 
     pub fn reset(&self) {
-        self.update(|s| {
-            s.hist.truncate(1);
-            s.idx = 0;
-            s.capture = None;
-        });
+        {
+            let mut p = self.program.borrow_mut();
+            p.hist.truncate(1);
+            p.idx = Step::START;
+            p.capture = None;
+        }
         self.emit(Event::Step);
     }
 
@@ -153,11 +199,12 @@ impl Session {
     }
 
     pub fn replace_history(&self, hist: Vec<Entry>) {
-        self.update(|s| {
-            s.idx = hist.len() - 1;
-            s.hist = hist;
-            s.capture = None;
-        });
+        {
+            let mut p = self.program.borrow_mut();
+            p.idx = Step::new(hist.len() - 1);
+            p.hist = hist;
+            p.capture = None;
+        }
         self.emit(Event::Step);
     }
 }

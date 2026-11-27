@@ -1,3 +1,5 @@
+use crate::*;
+
 /// A rule's schema, with pattern variables written `{x}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Schema(&'static str);
@@ -7,11 +9,11 @@ impl Schema {
         self.0
     }
 
-    /// Pattern variables in order of first appearance; a variable's highlighter slot is its index.
-    pub fn vars(&self) -> Vec<&'static str> {
+    /// Pattern variables in order of first appearance.
+    pub fn vars(&self) -> Vec<Var> {
         self.parts()
             .into_iter()
-            .filter_map(|(var, s)| var.then_some(s))
+            .filter_map(|p| if let Part::Var(v) = p { Some(v) } else { None })
             .fold(Vec::new(), |mut vs, v| {
                 if !vs.contains(&v) {
                     vs.push(v);
@@ -20,8 +22,14 @@ impl Schema {
             })
     }
 
-    /// The schema cut into literal text and pattern variables (`true`), in order.
-    pub fn parts(&self) -> Vec<(bool, &'static str)> {
+    /// A variable's highlighter: its position among `vars`.
+    pub fn slot(&self, var: Var) -> Option<Slot> {
+        self.vars().iter().position(|v| *v == var).map(Slot::at)
+    }
+
+    /// The schema cut into literal text and pattern variables, in order. A variable is one word
+    /// character between braces, as the JS `\{(\w)\}` reads it.
+    pub fn parts(&self) -> Vec<Part> {
         let mut out = Vec::new();
         let mut rest = self.0;
         while let Some(i) = rest.find('{') {
@@ -31,18 +39,18 @@ impl Schema {
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || c == '_') =>
                 {
-                    out.push((false, &rest[..i]));
-                    out.push((true, &rest[i + 1..i + 1 + j]));
+                    out.push(Part::Text(&rest[..i]));
+                    out.push(Part::Var(Var::new(&rest[i + 1..i + 1 + j])));
                     rest = &rest[i + 2 + j..];
                 }
                 _ => {
-                    out.push((false, &rest[..=i]));
+                    out.push(Part::Text(&rest[..=i]));
                     rest = &rest[i + 1..];
                 }
             }
         }
-        out.push((false, rest));
-        out.into_iter().filter(|(var, s)| *var || !s.is_empty()).collect()
+        out.push(Part::Text(rest));
+        out.into_iter().filter(|p| *p != Part::Text("")).collect()
     }
 }
 

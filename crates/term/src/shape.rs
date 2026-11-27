@@ -2,13 +2,13 @@ use crate::*;
 
 #[derive(Debug, Clone)]
 pub enum Shape {
-    Var(String),
-    Const(String),
-    Lam(String, Term),
+    Var(Name),
+    Const(Name),
+    Lam(Name, Term),
     App(Term, Term),
-    Let(String, Term, Term),
+    Let(Name, Term, Term),
     Pair(Term, Term),
-    Proj(u8, Term),
+    Proj(Field, Term),
 }
 
 impl Shape {

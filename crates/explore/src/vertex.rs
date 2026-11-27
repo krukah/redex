@@ -1,20 +1,22 @@
 use rules::*;
 use term::*;
 
+use crate::*;
+
 /// One term of the graph, keyed by α-equivalence.
 #[derive(Debug, Clone)]
 pub struct Vertex {
-    key: String,
+    key: Key,
     term: Term,
-    depth: usize,
-    parent: Option<usize>,
+    depth: Depth,
+    parent: Option<Id>,
     pkind: Option<Kind>,
     nf: bool,
     open: bool,
 }
 
 impl Vertex {
-    pub fn new(key: String, term: Term, depth: usize, parent: Option<usize>, pkind: Option<Kind>) -> Self {
+    pub fn new(key: Key, term: Term, depth: Depth, parent: Option<Id>, pkind: Option<Kind>) -> Self {
         Self {
             key,
             term,
@@ -26,7 +28,7 @@ impl Vertex {
         }
     }
 
-    pub fn key(&self) -> &str {
+    pub fn key(&self) -> &Key {
         &self.key
     }
 
@@ -35,12 +37,12 @@ impl Vertex {
     }
 
     /// Steps from the start on a shortest path.
-    pub fn depth(&self) -> usize {
+    pub fn depth(&self) -> Depth {
         self.depth
     }
 
     /// The vertex this one was first reached from.
-    pub fn parent(&self) -> Option<usize> {
+    pub fn parent(&self) -> Option<Id> {
         self.parent
     }
 

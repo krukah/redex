@@ -1,4 +1,5 @@
 use term::*;
+use units::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -7,10 +8,10 @@ pub enum Token {
     In,
     Assign,
     Arrow,
-    Proj(u8),
+    Proj(Field),
     Punct(char),
     Num(f64),
-    Id(String),
+    Id(Name),
 }
 
 impl Token {
@@ -32,7 +33,7 @@ impl Token {
     /// The token as parser errors quote it.
     pub fn text(&self) -> String {
         match self {
-            Self::Id(v) => v.clone(),
+            Self::Id(v) => v.to_string(),
             Self::Num(v) => Number::show(*v),
             Self::Proj(i) => format!(".{i}"),
             _ => self.kind(),
