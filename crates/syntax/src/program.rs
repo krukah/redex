@@ -18,7 +18,7 @@ impl Program {
         let mut env = Env::default();
         let mut notes = Vec::new();
         let mut body = Vec::new();
-        for (i, line) in src.split('\n').enumerate() {
+        for (i, line) in src.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).enumerate() {
             match (Line::note(line), Line::def(line)) {
                 (Some(note), _) => notes.push(note.to_string()),
                 (None, Some((name, def))) => Self::define(&mut env, i + 1, name, def)?,

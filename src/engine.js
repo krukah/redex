@@ -378,7 +378,7 @@ function resolve(t, env, bound = new Set()) {
 
 export function parseProgram(src) {
   const env = new Map(), notes = [], body = [];
-  src.split('\n').forEach((line, i) => {
+  src.split('\n').map(l => l.replace(/\r$/, '')).forEach((line, i) => {
     const d = line.match(/^\s*def\s+(\S+?)\s*:=(.*)$/);
     const c = line.match(/^\s*--\s?(.*)$/);
     if (c) { notes.push(c[1]); return; }

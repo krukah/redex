@@ -113,7 +113,7 @@ const ERRORS = [
   'λ. x', '(a, b', 'λx y', 'let x := a b', 'let := a; b', 'a )', '41', 'x # y', '', 'def zero := a\nzero',
   'def k := λ. x\nk', '-- only a note', 'fun x => ', '(a, b).3', 'p.12', 'a.1.2', 'λx => x', 'let x := a in x',
   'Nat.succ Nat.zero', 'f.g x', 'Foo.bar.baz y', 'x₁ y₂', 'λx. λx. x', '\\x. x', 'x ↦ y', '(λx ↦ x) a',
-  'def toString := a\nb', 'def constructor := a\nb', 'def __proto__ := λx. x\n__proto__ y', 'def valueOf := a\nvalueOf', '-- note\r\nx', 'def a\r:= b\na', 'def k:=λx. x\nk y',
+  'def toString := a\nb', 'def constructor := a\nb', 'def __proto__ := λx. x\n__proto__ y', 'def valueOf := a\nvalueOf', '-- note\r\nx', 'def k := a\r\n-- uses k\r\nk b\r\n', 'def a\r:= b\na', 'def k:=λx. x\nk y',
   '  def   k :=  z\nk', 'def k := a\ndef k := b\nk', 'let 5 := a; b', '99999999999999999999999 x', 'a.1.12', 'x.2.1',
 ];
 

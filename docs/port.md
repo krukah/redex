@@ -231,3 +231,7 @@ from one source, and each adds a case that fails before the fix and passes after
    the name up with `ALIAS[name]` on a plain object. Now `Object.hasOwn(ALIAS, name)`, in the
    check and in name resolution; the Rust drops its copy of the prototype list. Cases in
    `errors.json`: `toString`, `constructor`, `__proto__` (used as a constant), `valueOf`.
+2. **CRLF sources.** With `\r\n` line ends, the `def` and `--` regexes failed (`.` does not
+   match `\r`), so notes and definitions fell into the term body. Both parsers now drop one
+   trailing `\r` per line. Cases: `-- note\r\nx` (the note is kept now) and
+   `def k := a\r\n-- uses k\r\nk b\r\n`.
