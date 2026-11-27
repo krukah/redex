@@ -4,7 +4,7 @@ use syntax::*;
 use term::*;
 use widgets::*;
 
-/// One engine fixture and the blocks markup the JS renderer wrote for it, ids relative to a probe.
+/// One engine fixture and the blocks markup frozen with it, ids relative to a probe.
 struct Fixture(String, Value);
 
 impl Fixture {

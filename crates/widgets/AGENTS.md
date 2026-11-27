@@ -13,3 +13,6 @@ capture, busy) from context and never touches another widget's DOM. Term-shaped 
 attributes are read back with `Doc::read` into their types and queried with `markup::Query`.
 `redex.css` here is the one stylesheet; every selector starts with `.redex`. Exempt from `one-type-per-file` and `pub-field`
 (see House Lint), not from `free-function`.
+
+The blocks markup in `fixtures/engine` is frozen regression data; `tests/blocks.rs` checks the
+renderer against it byte for byte, and it changes only deliberately, from the Rust side.

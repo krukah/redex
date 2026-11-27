@@ -2,7 +2,7 @@ use examples::*;
 use layout::*;
 use syntax::*;
 
-/// The deck as the JS page drew it, from `fixtures/dom/deck.json`.
+/// The deck as the frozen `fixtures/dom/deck.json` records it.
 struct Deck(String);
 
 impl Deck {

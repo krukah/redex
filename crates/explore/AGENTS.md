@@ -8,3 +8,7 @@ flowchart LR
 
 Breadth-first exploration of every reduction path, keyed by α-equivalence. Stops expanding past the
 cap (the node that would expand is marked open) and skips results over 600 nodes.
+
+`fixtures/engine` is frozen regression data (first written from the JS engine, which is gone): the
+engine tests check against it, and it changes only deliberately, from the Rust side, with the
+behaviour change that needs it.

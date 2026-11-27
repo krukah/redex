@@ -1,10 +1,9 @@
 {
-  "name": "redex-workbench",
+  "name": "redex-checks",
   "private": true,
-  "description": "Interactive reduction rules (α β η δ ζ ι π) for the lambda calculus, styled after the Lean docs.",
+  "description": "Node tooling for the Rust Redex Workbench: scripts/reveal.mjs drives headless Chrome through playwright-core. scripts/bundle.mjs needs no packages.",
   "type": "module",
-  "scripts": {
-    "test": "node --test",
-    "serve": "python3 -m http.server 8000"
+  "devDependencies": {
+    "playwright-core": "1.58.2"
   }
 }

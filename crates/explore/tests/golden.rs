@@ -7,7 +7,7 @@ use subst::*;
 use syntax::*;
 use term::*;
 
-/// One fixture written by `scripts/golden.mjs`, and what the Rust engine says about its source.
+/// One frozen fixture from `fixtures/engine`, and what the engine says about its source.
 struct Case {
     name: String,
     want: Value,

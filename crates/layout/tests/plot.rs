@@ -4,7 +4,7 @@ use serde_json::Value;
 use strategy::*;
 use syntax::*;
 
-/// The graph widget's drawing of one term, as `scripts/golden-dom.mjs` read it from the JS page.
+/// The graph widget's drawing of one term, from the frozen `fixtures/dom`.
 struct Drawn(Value);
 
 impl Drawn {

@@ -1,38 +1,29 @@
-// Bundle index.html, its CSS and the ES modules into one HTML file without a document
-// skeleton, for publishing as a single-file claude.ai artifact preview.
+// Bundles the Rust page into one HTML file without a document skeleton, for publishing as a
+// single-file claude.ai artifact preview: the page, both stylesheets, the wasm-bindgen glue, and
+// the wasm itself as base64. Run scripts/site.sh first.
 // Usage: node scripts/bundle.mjs <out.html>
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const IMPORT = /import\s*\{([^}]*)\}\s*from\s*'\.\/([\w-]+)\.js';/g;
-
-// Modules in dependency order, found by following imports from the entry point.
-const order = [], seen = new Set();
-(function visit(name) {
-  if (seen.has(name)) return;
-  seen.add(name);
-  for (const [, , dep] of read(`src/${name}.js`).matchAll(IMPORT)) visit(dep);
-  order.push(name);
-})('redex');
-
-// Each module becomes a function scope; imports read from, and exports write to, __m.
-let js = 'const __m = {};\n';
-for (const name of order) {
-  const names = [];
-  const body = read(`src/${name}.js`)
-    .replace(IMPORT, (_, ids, mod) => `const {${ids.replace(/\s+as\s+/g, ': ')}} = __m['${mod}'];`)
-    .replace(/^export (const|let|function|async function) ([\w$]+)/gm, (_, kw, id) => { names.push(id); return `${kw} ${id}`; });
-  js += `__m['${name}'] = (() => {\n${body}\nreturn { ${names.join(', ')} };\n})();\n`;
-}
-
-const page = read('index.html')
-  .replace(/<!doctype html>\s*|<\/?html[^>]*>\s*|<\/?head>\s*|<\/?body>\s*/gi, '')
-  .replace(/\s*<meta charset[^>]*>|\s*<meta name="viewport"[^>]*>/g, '')
-  .replace('<link rel="stylesheet" href="site.css">', () => `<style>\n${read('site.css')}</style>`)
-  .replace('<link rel="stylesheet" href="src/redex.css">', () => `<style>\n${read('src/redex.css')}</style>`)
-  .replace(/<script type="module">\s*import \{ mountAll \} from '\.\/src\/redex\.js';/, () => `<script>\n${js}\nconst { mountAll } = __m['redex'];`);
-
+const read = (p, enc = 'utf8') => readFileSync(new URL(`../${p}`, import.meta.url), enc);
 const out = process.argv[2];
 if (!out) throw new Error('usage: node scripts/bundle.mjs <out.html>');
+
+const wasm = read('dist/site/redex_bg.wasm', null).toString('base64');
+const glue = read('dist/site/redex.js');
+const script = `<script type="module">
+${glue}
+const bytes = Uint8Array.from(atob(${JSON.stringify(wasm)}), c => c.charCodeAt(0));
+await __wbg_init({ module_or_path: bytes });
+mountAll();
+</script>`;
+
+const page = read('bin/page/index.html')
+  .replace(/<!doctype html>\s*|<\/?html[^>]*>\s*|<\/?head>\s*|<\/?body>\s*/gi, '')
+  .replace(/\s*<meta charset[^>]*>|\s*<meta name="viewport"[^>]*>/g, '')
+  .replace('<link data-trunk rel="css" href="site.css">', () => `<style>\n${read('bin/page/site.css')}</style>`)
+  .replace('<link data-trunk rel="css" href="../../crates/widgets/redex.css">', () => `<style>\n${read('crates/widgets/redex.css')}</style>`)
+  .replace(/\s*<link data-trunk rel="rust"[^>]*>/, '')
+  .trimEnd() + `\n${script}\n`;
+
 writeFileSync(out, page.trimStart());
 console.log(`wrote ${out} (${page.length} bytes)`);
