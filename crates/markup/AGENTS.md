@@ -16,8 +16,8 @@ class the stylesheet does not know; data attribute names live in `Data`; selecto
 `Query` values from the same pieces.
 
 - `Node`'s `Display` is the only place markup becomes a string, and the only place anything is
-  escaped. Its output must equal the JS renderers' byte for byte (attribute order, `/>` on empty
+  escaped. Its output must equal the frozen fixtures byte for byte (attribute order, `/>` on empty
   SVG elements, number formatting), which `widgets/tests/blocks.rs` and the layout tests check.
-- `Num` carries a number with the JS formatting it was written with (`String(x)` or `toFixed(1)`);
-  `Trace` is SVG path data, spaced (`M0 0 C…`) or tight (`M0 0L1 1Z`) as the JS wrote it.
+- `Num` carries a number with its formatting (`String(x)` or `toFixed(1)`); `Trace` is SVG path
+  data, spaced (`M0 0 C…`) for edges or tight (`M0 0L1 1Z`) for marks.
 - No DOM and no Leptos: `widgets` builds real elements from a `Node` (`Doc::fill`).

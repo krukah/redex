@@ -1,4 +1,4 @@
-/// JavaScript's regex classes, so lines and names split exactly as the JS engine splits them.
+/// JavaScript's regex classes (`\s`, `.`), which the source format was defined with.
 pub struct Line;
 
 impl Line {

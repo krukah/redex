@@ -5,7 +5,7 @@ use term::*;
 use units::*;
 
 /// A deck tile's thumbnail of an example's reduction graph, in the graph widget's grammar, and the
-/// line that says how the example ends. Coordinates print to tenths, as the JS wrote them.
+/// line that says how the example ends. Coordinates print to tenths, as the fixtures record them.
 #[derive(Debug, Clone)]
 pub struct Thumb {
     svg: Node,

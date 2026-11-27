@@ -38,7 +38,7 @@ impl Scope {
     }
 }
 
-/// One node's drawing in progress: its classes and attributes, written in the JS order.
+/// One node's drawing in progress: its classes and attributes, in the order the fixtures record.
 struct Draft {
     classes: Vec<Class>,
     attrs: Vec<Attr>,

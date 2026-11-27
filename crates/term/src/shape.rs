@@ -12,7 +12,7 @@ pub enum Shape {
 }
 
 impl Shape {
-    /// The kind as the JS engine names it.
+    /// The kind as the fixtures name it.
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Var(_) => "var",

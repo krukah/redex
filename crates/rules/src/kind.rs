@@ -115,7 +115,7 @@ impl Kind {
 }
 
 impl std::fmt::Display for Kind {
-    /// The name the JS engine uses (`etaS` included).
+    /// The rule's name in markup and fixtures (`etaS` included).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
     }

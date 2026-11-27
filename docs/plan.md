@@ -78,7 +78,7 @@ Each crate gets an `AGENTS.md` that opens with a small diagram, and a row in the
 - **Size.** Report the gzipped `.wasm` size at each milestone. Release profile: `opt-level = "z"`,
   LTO, `codegen-units = 1`, `wasm-opt`.
 
-## Milestones
+## Milestones (all done)
 
 Each ends with a green gate and a commit. The agent keeps `docs/port.md` as a ledger: milestone,
 status, decisions taken, parity gaps.
@@ -96,6 +96,10 @@ status, decisions taken, parity gaps.
    output for the Jekyll site, and the single-file artifact bundle (`scripts/bundle`).
 7. **Cutover.** Delete `src/`, `test/`, `package.json`, the JS bundler; update README and AGENTS.
    Stop before this step and ask the user.
+
+Status: milestones 0–7 are done, plus 6b (typed markup, newtypes, house style) and the bug fixes
+added along the way; `docs/port.md` has the record of each. The JS is deleted; the fixtures it
+wrote stay as frozen regression data.
 
 ## Agent rules of engagement
 

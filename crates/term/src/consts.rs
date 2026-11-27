@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::*;
 
 /// Names that are constants, never fresh variables: the primitives, plus every name a session has
-/// defined. Per thread and only ever growing, like the JS engine's `CONSTS`.
+/// defined. Per thread and only ever growing.
 pub struct Consts;
 
 impl Consts {

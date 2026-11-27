@@ -143,7 +143,7 @@ pub enum Class {
     LaneTop,
     Count,
     End,
-    /// An empty slot in a class list, where the JS template left one: `rdx-tile ` on an example
+    /// An empty slot in a class list, where the drawing has one: `rdx-tile ` on an example
     /// tile, which has no rule ink, and the `""` before ` fut` in the trace.
     Blank,
     /// A binder's hue: `h0` … `h5`.

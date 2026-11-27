@@ -319,3 +319,25 @@ Parity
 Size: 170.3 KB gzipped (page), up from 155.2 KB; 192.8 KB for the site build (was 176.8 KB).
 Building DOM node by node, the typed tree and its renderer, and the selector type account for
 the growth.
+
+## 7. Cutover — done
+
+- Deleted: `src/` (the JS app and its stylesheet), `test/`, the root `index.html` and `site.css`
+  (the copies in `bin/page` and `crates/widgets/redex.css` are now the only ones), the JS
+  bundler, and the scripts whose job was comparing against the JS: `golden.mjs`,
+  `golden-dom.mjs`, `parity.mjs` and `parity-states.json`.
+- Kept: `fixtures/engine` and `fixtures/dom`, as frozen regression data; the Rust tests check
+  against them, and they change only deliberately, from the Rust side (noted in the explore,
+  layout and widgets `AGENTS.md`). `scripts/site.sh`. The single-file bundler, renamed from
+  `bundle-wasm.mjs` to `bundle.mjs` (needs no packages). `scripts/reveal.mjs`, reduced to a
+  Rust-only browser check of two widget groups on one page.
+- `package.json` now only pins `playwright-core` for `reveal.mjs` (with a lockfile).
+- CI: the golden job is gone; House Lint also runs `--all` and each opt-in rule; a new job builds
+  the site bundle (wasm-bindgen CLI pinned to `Cargo.lock`, binaryen from apt) and runs
+  `reveal.mjs` in headless Chrome. Not run: nothing is pushed.
+- README and root `AGENTS.md` describe the Rust-only repo: layout by crate, commands, the host-page
+  snippet with `await init(); mountAll();`. Comments that pointed at the JS now point at the
+  fixtures.
+
+The milestone sections above are a record of the port as it happened, so they still name the
+deleted scripts.

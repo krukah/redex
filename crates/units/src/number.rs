@@ -1,4 +1,4 @@
-/// Numbers printed the way JavaScript prints them, for output that must match the JS widgets.
+/// Numbers printed the way JavaScript prints them: the format the fixtures record.
 pub struct Number;
 
 impl Number {

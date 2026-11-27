@@ -1,6 +1,6 @@
 use units::*;
 
-/// A number in an SVG attribute or path, with the JS formatting it was written with.
+/// A number in an SVG attribute or path, with the JavaScript formatting the fixtures record.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Num {
     /// `String(x)`.

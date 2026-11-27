@@ -4,8 +4,8 @@ Interactive reduction rules for the lambda calculus, headed for a post on krukah
 workspace with a Leptos (CSR) frontend built by Trunk. See README.md for how a page embeds the
 widgets. **Subtree rules live in each crate's `AGENTS.md`**, which opens with a small diagram.
 
-The JavaScript original (`src/`, `test/`, `scripts/bundle.mjs`) stays in place as the parity oracle
-until cutover; `docs/plan.md` is the port plan and `docs/port.md` its ledger.
+The app was ported from a JavaScript original, since deleted; `docs/plan.md` is the port plan and
+`docs/port.md` its ledger.
 
 ## Subtree AGENTS.md index
 
@@ -38,8 +38,8 @@ flowchart LR
 ## Rules
 
 - The engine crates (`units` … `examples`), `markup` and `layout` stay free of the DOM: no
-  `web-sys`, no `leptos`. They are covered by `cargo test`, and the golden fixtures in `fixtures/engine` (written by
-  `node scripts/golden.mjs` from the JS engine) are the spec they must match exactly.
+  `web-sys`, no `leptos`. They are covered by `cargo test` against `fixtures/`, frozen regression
+  data that changes only deliberately, with the behaviour change that needs it.
 - A widget queries only inside its own root and talks to others only through the `Session`
   context. No element ids, no module-level DOM state: a host page may hold several widgets.
 - Markup is a `markup::Node`, never a string: classes come from the closed `markup::Class` enum
@@ -78,6 +78,7 @@ trunk build --release                                         # the page, into d
 cargo run --manifest-path crates/lints/Cargo.toml -- --base master
 cargo run --manifest-path crates/lints/Cargo.toml -- --all   # and --only each opt-in rule
 trunk serve                                                   # http://localhost:8001
+scripts/site.sh && npm install && node scripts/reveal.mjs     # host-page build and browser check
 ```
 
 ## Taste & Stylistic Tendencies

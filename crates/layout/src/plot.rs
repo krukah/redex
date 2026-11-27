@@ -7,7 +7,7 @@ use crate::*;
 
 /// The graph widget's geometry. Rows are BFS depth; within a row, vertices sort by the mean x of
 /// their parents one row up. Edges between rows point down, edges within a row arc above it, and
-/// edges back to an earlier row swing out to the right. Every expression keeps the JS order of
+/// edges back to an earlier row swing out to the right. Every expression keeps its order of
 /// operations, since the numbers must print the same to the last digit.
 #[derive(Debug, Clone)]
 pub struct Plot {

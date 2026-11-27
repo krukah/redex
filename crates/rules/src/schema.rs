@@ -28,7 +28,7 @@ impl Schema {
     }
 
     /// The schema cut into literal text and pattern variables, in order. A variable is one word
-    /// character between braces, as the JS `\{(\w)\}` reads it.
+    /// character between braces, as the regex `\{(\w)\}` reads it.
     pub fn parts(&self) -> Vec<Part> {
         let mut out = Vec::new();
         let mut rest = self.0;

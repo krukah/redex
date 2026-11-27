@@ -239,7 +239,7 @@ impl Bench {
     /// Between the pieces of a firing, and between the copies of one piece.
     const PIECES: Ms = Ms::new(50.0);
     const COPIES: Ms = Ms::new(40.0);
-    /// How much of a bound piece the rule card shows, in UTF-16 units as the JS counts them.
+    /// How much of a bound piece the rule card shows, in UTF-16 units.
     const SHORT: usize = 34;
     /// A run stops after this many steps, or once the term passes this size.
     const STEPS: Step = Step::new(200);

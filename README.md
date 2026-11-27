@@ -1,35 +1,51 @@
 # Redex Workbench
 
 Fire α, β, η, δ, ζ, ι and π redexes by hand, see every reduction path of a term as a graph, and
-race three evaluation strategies. Plain HTML, CSS and ES modules: no build step, no dependencies.
+race three evaluation strategies. A Rust workspace with a Leptos (CSR) frontend, built to
+WebAssembly by Trunk.
 
 ```bash
-npm run serve   # http://localhost:8000 (ES modules need a server; file:// will not load them)
-npm test        # engine tests, node:test
+trunk serve                    # http://localhost:8001, the standalone page
+trunk build --release          # the page, into dist/
+cargo test --workspace         # engine, layout and markup tests, against the frozen fixtures
+scripts/site.sh                # dist/site: redex.js, redex_bg.wasm, redex.css for a host page
+node scripts/bundle.mjs out.html   # one self-contained file (after scripts/site.sh)
+npm install && node scripts/reveal.mjs   # browser check of two widget groups on one page
 ```
+
+Needs the `wasm32-unknown-unknown` target, Trunk, and for `scripts/site.sh` a `wasm-bindgen` CLI
+of the version in `Cargo.lock` plus `wasm-opt`. `package.json` exists only to pin
+`playwright-core` for `scripts/reveal.mjs`; `scripts/bundle.mjs` needs no packages.
 
 ## Layout
 
 | Path | What it holds |
 |---|---|
-| `src/engine.js` | Terms, the seven rules as schemas with bindings, capture-avoiding substitution, node provenance, strategies, parser, text printer, graph exploration. No DOM. |
-| `src/motion.js` | Motion primitives (enter, exit, slide, resize, fly, draw) and their compositions (all, seq, after, stagger, act). Every animation is built from these. |
-| `src/blocks.js` | The nested-block view of a term: one element per node, carrying its path and provenance. |
-| `src/examples.js` | Example programs. Each carries its own `def`s; `--` lines become the caption. |
-| `src/session.js` | Shared state (program, history). Widgets talk to each other only through it. |
-| `src/rules.js` `workbench.js` `graph.js` `race.js` | One widget each: `mountX(root, session)`. The rules widget is a deck: a row of rule tiles above a row of example tiles on one shared column grid; each example tile shows a thumbnail of its reduction graph. |
-| `src/redex.js` | `mountAll()`: mounts every `[data-redex]` element on the page with one shared session. |
-| `src/redex.css` | Widget styles, all scoped under `.redex`, all colors and fonts from `--rdx-*` tokens. |
-| `index.html`, `site.css` | The standalone page, styled after the Lean documentation (Verso), without its sidebar. |
-| `scripts/bundle.mjs` | Inlines the page, CSS and modules into one file for a claude.ai artifact preview. |
-| `test/engine.test.js` | Normal forms, strategy step counts, capture, confluence, parser, provenance, rule bindings. |
+| `crates/units` | `Px`, `Ms`, and numbers printed as JavaScript prints them. |
+| `crates/term` | Terms: nodes with uids and provenance (`from`), names, paths, α-keys, definitions. |
+| `crates/subst` | Capture-avoiding substitution, binder renaming (`prepare`), the naive capturing variant. |
+| `crates/syntax` | Tokenizer, parser, programs (`def`s and `--` notes), the text printer. |
+| `crates/rules` | The seven rules as schemas with bindings; redex search and contraction. |
+| `crates/strategy` | Normal, applicative and weak head order; the step-capped runner. Never η. |
+| `crates/explore` | The reduction graph: every path to a cap, edges by rule, cycles. |
+| `crates/examples` | Example and race programs. Each carries its own `def`s; `--` lines become the caption. |
+| `crates/markup` | A typed HTML/SVG tree, its closed class set, typed attributes, selectors, one escaping renderer. |
+| `crates/layout` | Pure geometry for the graph and the deck's thumbnails. |
+| `crates/motion` | Motion primitives (enter, exit, slide, resize, fly, crossfade, draw) and compositions (all, seq, after, stagger, act). Every animation is built from these. |
+| `crates/widgets` | The four Leptos widgets (rules deck, workbench, graph, race), the shared `Session`, and `redex.css`. |
+| `crates/redex` | `mountAll()`: mounts every `[data-redex]` element on the page with one shared session. |
+| `bin/page` | The standalone page (`index.html`, `site.css`), styled after the Lean documentation (Verso). |
+| `crates/lints` | House Lint, outside the workspace. |
+| `fixtures/` | Frozen regression data the tests check against (`engine/` per term, `dom/` per drawing). |
+| `scripts/` | `site.sh` (host-page build), `bundle.mjs` (single-file artifact), `reveal.mjs` (browser check). |
+| `docs/` | The port plan and its ledger, and the todo list. |
 
 ## Core model
 
 - **Term**: a tree of `var`, `const`, `lam`, `app`, `let`, `pair`, `proj`. Every node has a `uid`;
   a node built from an older one records it in `from`.
 - **Rule**: a schema over pattern variables, such as `(λ{x}. {t}) {s} ⟶ {t}[{x} := {s}]`, plus
-  `bindings()`, which says where each pattern variable sits inside a redex.
+  `bindings`, which say where each pattern variable sits inside a redex.
 - **Firing**: match (paint each bound piece in its variable's highlighter color), bind (list the
   bindings on the rule card), move. Move is one composition over one beat: the rest of the redex
   fades out in place, each bound piece flies in a straight line to every node of the result whose
@@ -52,13 +68,15 @@ Widgets are independent `<div>`s, so prose can sit between them:
 <div data-redex="race"></div>
 
 <script type="module">
-  import { mountAll } from '/assets/redex/redex.js';
+  import init, { mountAll } from '/assets/redex/redex.js';
+  await init();
   mountAll();
 </script>
 ```
 
-For the Jekyll site, copy `src/` to `assets/redex/` and put the block above in a post; kramdown
-passes raw HTML blocks through. Two things to handle there:
+For the Jekyll site, run `scripts/site.sh`, copy `dist/site/` to `assets/redex/`, and put the block
+above in a post; kramdown passes raw HTML blocks through. `mountAll(scope)` mounts only the
+widgets under `scope`, each group with its own session. Two things to handle there:
 
 - **Theme.** Set the `--rdx-*` tokens to the site's own. The defaults are light; a dark page also
   needs lighter rule hues (`--rdx-alpha` … `--rdx-proj`). A starting point for krukah.com:
