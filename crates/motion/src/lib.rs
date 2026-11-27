@@ -1,4 +1,5 @@
 mod clock;
+mod cue;
 mod ease;
 mod first;
 mod ghost;
@@ -9,6 +10,7 @@ mod settle;
 mod tween;
 
 pub use clock::*;
+pub use cue::*;
 pub use ease::*;
 pub use first::*;
 pub use ghost::*;

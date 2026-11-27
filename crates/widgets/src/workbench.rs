@@ -948,8 +948,10 @@ impl Bench {
     }
 
     async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, clock: Clock) {
+        Cue::Fire.mark();
         if let Some((renamed, note)) = self.rename_first(&self.session().term(), &path, kind) {
             self.session().push(Entry::new(renamed, Some(Kind::Alpha), Some(note)));
+            Cue::Alpha.mark();
             if Motion::enabled() {
                 Motion::wait(clock.scale(Self::RENAME)).await;
             }
@@ -963,7 +965,9 @@ impl Bench {
             }
             self.show_rule(rx.as_ref().map(|rx| (rx, &m)));
             self.paint(&m, Class::Hard);
+            Cue::Hold.mark();
             Motion::wait(clock.scale(Self::HOLD)).await;
+            Cue::Lift.mark();
             lifted = Some(self.lift(&m, &path));
         }
         let (now, env) = (self.session().term(), self.session().env());
@@ -973,7 +977,9 @@ impl Bench {
             None,
         ));
         if let Some(lifted) = lifted {
+            Cue::Move.mark();
             self.move_to(&lifted, &path).play(clock).await;
+            Cue::Moved.mark();
         }
     }
 

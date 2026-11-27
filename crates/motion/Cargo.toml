@@ -23,6 +23,7 @@ web-sys      = { workspace = true, features = [
   "HtmlElement",
   "MediaQueryList",
   "Node",
+  "Performance",
   "Window",
 ] }
 
