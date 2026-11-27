@@ -801,38 +801,43 @@ impl Bench {
         }
         let rect = pc.rect()?.clone();
         let slot = pc.slot();
-        let copies = hits.iter().enumerate().map(|(j, tg)| {
-            let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
-            let dst = Ghost::pin(
-                tg,
-                Some(&rect),
-                true,
-                &slot
-                    .map(|s| vec![Class::Moving, Class::Slot(s), Class::Hard])
-                    .unwrap_or_default(),
-            )?;
-            let (dx, dy) = Ghost::delta(&rect, &tg.get_bounding_client_rect());
-            Doc::add(tg, &[Class::Arriving]);
-            let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
-            Some(Motion::seq(vec![
-                Motion::all(vec![
-                    Motion::fly(&src, dx, dy, Tween::default()),
-                    Motion::fly(&dst, dx, dy, Tween::default()),
-                    Motion::crossfade(&src, &dst, Tween::default()),
-                ]),
-                Motion::act(move || {
-                    Doc::remove(&tg, &[Class::Arriving]);
-                    if let Some(s) = slot {
-                        Doc::add(&tg, &[Class::Landed, Class::Slot(s)]);
-                    }
-                }),
-                Motion::act(move || {
-                    a.remove();
-                    b.remove();
-                }),
-            ]))
-        });
-        Some(Motion::stagger(Self::COPIES, copies.collect()))
+        Some(Motion::stagger(
+            Self::COPIES,
+            hits.iter()
+                .enumerate()
+                .map(|(j, tg)| {
+                    let src = if j > 0 { Self::twin(&ghost) } else { Some(ghost.clone()) }?;
+                    let dst = Ghost::pin(
+                        tg,
+                        Some(&rect),
+                        true,
+                        &slot
+                            .map(|s| vec![Class::Moving, Class::Slot(s), Class::Hard])
+                            .unwrap_or_default(),
+                    )?;
+                    let (dx, dy) = Ghost::delta(&rect, &tg.get_bounding_client_rect());
+                    Doc::add(tg, &[Class::Arriving]);
+                    let (tg, a, b) = (tg.clone(), src.clone(), dst.clone());
+                    Some(Motion::seq(vec![
+                        Motion::all(vec![
+                            Motion::fly(&src, dx, dy, Tween::default()),
+                            Motion::fly(&dst, dx, dy, Tween::default()),
+                            Motion::crossfade(&src, &dst, Tween::default()),
+                        ]),
+                        Motion::act(move || {
+                            Doc::remove(&tg, &[Class::Arriving]);
+                            if let Some(s) = slot {
+                                Doc::add(&tg, &[Class::Landed, Class::Slot(s)]);
+                            }
+                        }),
+                        Motion::act(move || {
+                            a.remove();
+                            b.remove();
+                        }),
+                    ]))
+                })
+                .collect(),
+        ))
     }
 
     fn twin(g: &Element) -> Option<Element> {
@@ -1246,18 +1251,23 @@ impl Bench {
         let Some(window) = web_sys::window() else { return };
         let _ = window.cancel_animation_frame(self.raf().get());
         let me = self.clone();
-        let frame = Closure::once_into_js(move || {
-            me.links();
-            if me.session().capture().is_some()
-                && let Some(panel) = me.q(&Class::Capture.into())
-                && let (Some(stage), Some(line)) =
-                    (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into()))
-            {
-                Links::draw(&stage, &line, true);
-            }
-        });
-        self.raf()
-            .set(window.request_animation_frame(frame.unchecked_ref()).unwrap_or(0));
+        self.raf().set(
+            window
+                .request_animation_frame(
+                    Closure::once_into_js(move || {
+                        me.links();
+                        if me.session().capture().is_some()
+                            && let Some(panel) = me.q(&Class::Capture.into())
+                            && let (Some(stage), Some(line)) =
+                                (Doc::q(&panel, &Class::Stage.into()), Doc::q(&panel, &Class::Line.into()))
+                        {
+                            Links::draw(&stage, &line, true);
+                        }
+                    })
+                    .unchecked_ref(),
+                )
+                .unwrap_or(0),
+        );
     }
 
     /// Listeners that outlive the view: the session, the keyboard, and the fonts.
