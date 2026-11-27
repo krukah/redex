@@ -45,10 +45,10 @@ impl Run {
 
     /// Steps taken: one fewer than the terms passed through.
     pub fn steps(&self) -> Step {
-        Step::new(self.rows.len() - 1)
+        Step::new(self.rows().len() - 1)
     }
 
     pub fn last(&self) -> &Term {
-        self.rows.last().expect("a run holds its start").term()
+        self.rows().last().expect("a run holds its start").term()
     }
 }

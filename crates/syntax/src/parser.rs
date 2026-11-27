@@ -21,13 +21,25 @@ impl Parser {
         }
     }
 
+    fn toks(&self) -> &[Token] {
+        &self.toks
+    }
+
+    fn k(&self) -> usize {
+        self.k
+    }
+
+    fn k_mut(&mut self) -> &mut usize {
+        &mut self.k
+    }
+
     fn peek(&self) -> Option<&Token> {
-        self.toks.get(self.k)
+        self.toks().get(self.k())
     }
 
     fn next(&mut self) -> Option<Token> {
-        let tk = self.toks.get(self.k).cloned();
-        self.k += 1;
+        let tk = self.toks().get(self.k()).cloned();
+        *self.k_mut() += 1;
         tk
     }
 

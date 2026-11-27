@@ -32,7 +32,7 @@ impl Race {
     ];
 
     pub fn find(id: &str) -> Option<Race> {
-        Self::ALL.into_iter().find(|r| r.id == id)
+        Self::ALL.into_iter().find(|r| r.id() == id)
     }
 
     pub fn id(&self) -> &'static str {

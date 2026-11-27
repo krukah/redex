@@ -30,11 +30,17 @@ impl Settle {
     }
 }
 
+impl Settle {
+    fn state(&self) -> &Rc<RefCell<(bool, Option<Waker>)>> {
+        &self.state
+    }
+}
+
 impl Future for Settle {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        let mut s = self.state.borrow_mut();
+        let mut s = self.state().borrow_mut();
         if s.0 {
             Poll::Ready(())
         } else {

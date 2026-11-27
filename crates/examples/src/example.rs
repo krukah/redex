@@ -175,7 +175,7 @@ let p := (double 1, b); p.1",
     }
 
     pub fn find(id: &str) -> Option<Example> {
-        Self::all().find(|e| e.id == id)
+        Self::all().find(|e| e.id() == id)
     }
 
     pub fn id(&self) -> &'static str {

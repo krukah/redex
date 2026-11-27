@@ -9,6 +9,14 @@ pub struct Trace {
 }
 
 impl Trace {
+    fn segs(&self) -> &[Seg] {
+        &self.segs
+    }
+
+    fn gapped(&self) -> bool {
+        self.spaced
+    }
+
     pub fn spaced(segs: Vec<Seg>) -> Self {
         Self { segs, spaced: true }
     }
@@ -20,9 +28,9 @@ impl Trace {
 
 impl std::fmt::Display for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.segs
+        self.segs()
             .iter()
             .enumerate()
-            .try_for_each(|(i, s)| if i > 0 && self.spaced { write!(f, " {s}") } else { write!(f, "{s}") })
+            .try_for_each(|(i, s)| if i > 0 && self.gapped() { write!(f, " {s}") } else { write!(f, "{s}") })
     }
 }

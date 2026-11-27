@@ -29,6 +29,6 @@ impl Edge {
 
     /// Whether the edge joins these two vertices, in this direction.
     pub fn joins(&self, from: Id, to: Id) -> bool {
-        self.from == from && self.to == to
+        self.from() == from && self.to() == to
     }
 }

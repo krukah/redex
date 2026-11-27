@@ -2,15 +2,15 @@ use std::cell::Cell;
 
 use crate::*;
 
-/// One node. The shape is fixed; `from`, `mark` and `cap` are decorations the workbench strips
+/// One node. The shape is fixed; its origin, flash and capture flag are decorations the workbench strips
 /// after it first draws them, and history entries share subtrees, so they live in cells.
 #[derive(Debug)]
 pub(crate) struct Node {
     uid: Uid,
     shape: Shape,
-    from: Cell<Option<Uid>>,
-    mark: Cell<Option<Mark>>,
-    cap: Cell<bool>,
+    origin: Cell<Option<Uid>>,
+    flash: Cell<Option<Mark>>,
+    caught: Cell<bool>,
 }
 
 impl Node {
@@ -18,9 +18,9 @@ impl Node {
         Self {
             uid,
             shape,
-            from: Cell::new(None),
-            mark: Cell::new(None),
-            cap: Cell::new(false),
+            origin: Cell::new(None),
+            flash: Cell::new(None),
+            caught: Cell::new(false),
         }
     }
 
@@ -32,27 +32,39 @@ impl Node {
         &self.shape
     }
 
+    fn origin(&self) -> &Cell<Option<Uid>> {
+        &self.origin
+    }
+
+    fn flash(&self) -> &Cell<Option<Mark>> {
+        &self.flash
+    }
+
+    fn caught(&self) -> &Cell<bool> {
+        &self.caught
+    }
+
     pub fn from(&self) -> Option<Uid> {
-        self.from.get()
+        self.origin().get()
     }
 
     pub fn mark(&self) -> Option<Mark> {
-        self.mark.get()
+        self.flash().get()
     }
 
     pub fn cap(&self) -> bool {
-        self.cap.get()
+        self.caught().get()
     }
 
     pub fn set_from(&self, uid: Option<Uid>) {
-        self.from.set(uid);
+        self.origin().set(uid);
     }
 
     pub fn set_mark(&self, mark: Option<Mark>) {
-        self.mark.set(mark);
+        self.flash().set(mark);
     }
 
     pub fn set_cap(&self, cap: bool) {
-        self.cap.set(cap);
+        self.caught().set(cap);
     }
 }

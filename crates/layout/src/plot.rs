@@ -158,6 +158,14 @@ impl Plot {
         })
     }
 
+    fn count(&self) -> usize {
+        self.rows
+    }
+
+    fn spots(&self) -> &[Spot] {
+        &self.spots
+    }
+
     pub fn width(&self) -> Px {
         self.width
     }
@@ -168,11 +176,11 @@ impl Plot {
 
     /// Every row, top to bottom.
     pub fn rows(&self) -> impl Iterator<Item = Depth> {
-        (0..self.rows).map(Depth::new)
+        (0..self.count()).map(Depth::new)
     }
 
     pub fn spot(&self, v: Id) -> &Spot {
-        &self.spots[v.get()]
+        &self.spots()[v.get()]
     }
 
     /// The path of each edge, in edge order.

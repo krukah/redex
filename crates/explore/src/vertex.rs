@@ -61,11 +61,19 @@ impl Vertex {
         self.open
     }
 
+    fn nf_mut(&mut self) -> &mut bool {
+        &mut self.nf
+    }
+
+    fn open_mut(&mut self) -> &mut bool {
+        &mut self.open
+    }
+
     pub fn set_nf(&mut self, nf: bool) {
-        self.nf = nf;
+        *self.nf_mut() = nf;
     }
 
     pub fn set_open(&mut self) {
-        self.open = true;
+        *self.open_mut() = true;
     }
 }

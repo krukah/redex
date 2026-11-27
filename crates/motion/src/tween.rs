@@ -31,25 +31,36 @@ impl Tween {
 
     /// These options over a primitive's defaults: what the caller set wins.
     pub fn over(self, base: Tween) -> Self {
-        let Self { ms, delay, ease, keep } = self;
+        let (
+            Self { ms, delay, ease, keep },
+            Self {
+                ms: m,
+                delay: d,
+                ease: e,
+                keep: k,
+            },
+        ) = (self, base);
         Self {
-            ms: ms.or(base.ms),
-            delay: delay.or(base.delay),
-            ease: ease.or(base.ease),
-            keep: keep || base.keep,
+            ms: ms.or(m),
+            delay: delay.or(d),
+            ease: ease.or(e),
+            keep: keep || k,
         }
     }
 
     pub fn duration(&self) -> Ms {
-        self.ms.unwrap_or(Motion::BEAT)
+        let Self { ms, .. } = self;
+        ms.unwrap_or(Motion::BEAT)
     }
 
     pub fn wait(&self) -> Ms {
-        self.delay.unwrap_or(Ms::ZERO)
+        let Self { delay, .. } = self;
+        delay.unwrap_or(Ms::ZERO)
     }
 
     pub fn easing(&self) -> Ease {
-        self.ease.unwrap_or(Ease::Move)
+        let Self { ease, .. } = self;
+        ease.unwrap_or(Ease::Move)
     }
 
     pub fn keeps(&self) -> bool {
