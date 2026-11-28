@@ -347,3 +347,149 @@ the growth.
 
 The milestone sections above are a record of the port as it happened, so they still name the
 deleted scripts.
+
+## 8. A workbench that holds still — done
+
+Two asks from reading the post at blog width: the workbench must never change height, and every
+firing must take the same time with legible motion. Recorded in commits `ef6db14` … on master.
+
+### Timing, measured
+
+`motion::Cue` marks each phase on the performance timeline (`redex:fire`, `alpha`, `hold`, `lift`,
+`move`, `moved`), and `scripts/tempo.mjs` steps and normalizes examples in Chrome and prints one
+row per firing. Columns: α-hold (fire → hold, only for a renaming step), hold (hold → lift),
+push (drawing the contracted term), move (move → moved), gap (moved → next fire), total
+(fire → moved).
+
+Before (`mix`, the widest spread; every example showed the same pattern):
+
+```
+mix: Step by Step                                mix: Normalize
+step rule  α-hold  hold  push  move  gap  total  step rule  hold  push  move  gap  total
+   1 ζ          0   562     6   745   36  1314     1 ζ     431     3   562    0    997
+   2 π          0   562    10   626   37  1197     2 π     433     4   498    0    934
+   3 δ          0   562     6   695   36  1264     3 δ     432     5   529    0    966
+   4 β          0   560     7   746   36  1314     4 β     256     4   340    0    600
+   5 ι          0   561     6   763   36  1331     5 ι     256     3   341    0    600
+   6 β          0   562     6   696   36  1264     6 β     255     4   324    0    583
+   7 β          0   562     6   746   36  1315     7 β     255     5   338    0    600
+   8 ι          0   561     5   347    -   913     8 ι     255     4   174    -    433
+spread 418 ms                                    spread 564 ms
+capture (α then β): α-hold 1002, total 2330 by Step; 771 and 1781 under Normalize
+```
+
+Sources of the variance:
+
+- The move was `BEAT` plus a stagger of 50 ms per piece and 40 ms per copy, so it grew with the
+  term (626–763 ms).
+- Each phase was a `setTimeout` racing the animation plus 60 ms of slack, and the drawing of the
+  new term (2–10 ms) and the slack added to the step instead of fitting inside it.
+- Normalize sped up as it went (speed 1.3, then 2.2 after three steps, then 4.5): the first steps
+  ~1000 ms, later ones ~600.
+- The α step had its own constant (`RENAME`, 1000 ms) unrelated to the rest.
+- A firing whose result has no element of its own (ι folding into a numeral) found nothing to
+  land on: the move ended at 347 ms and the result snapped in.
+- Inside the move, exits ran over .55 of the beat and the crossfade over .45, but the glide of the
+  surrounding context measured after the resize had begun, so the context jumped once before
+  sliding and again at the end.
+
+After (`scripts/tempo.mjs page`, every example):
+
+```
+mix: Step by Step                                mix: Normalize
+step rule  α-hold  hold  push  move  gap  total  step rule  hold  push  move  gap  total
+   1 ζ          0   560     8   612  287  1181     1 ζ     280     3   308  120    592
+   2 π          0   560     4   616  286  1181     2 π     280     3   307  120    590
+   3 δ          0   561     6   615  287  1182     3 δ     280     4   308  118    593
+   4 β          0   559     7   614  286  1180     4 β     281     5   305  121    591
+   5 ι          0   560     5   614  285  1180     5 ι     281     6   302  122    590
+   6 β          0   561     4   618  286  1183     6 β     280     5   306  120    591
+   7 β          0   561     6   615  284  1181     7 β     279     4   306  120    591
+   8 ι          0   561     3   618    -  1182     8 ι     280     4   306    -    591
+spread 3 ms                                      spread 3 ms
+beta, church, delta: spread 1–3 ms, the same numbers
+capture (α then β): α-hold 1422 (one full step), then 1181 by Step; 712 and 592 under Normalize
+```
+
+By Step the gap is Settle (240 ms) plus the check's own click; under Normalize it is Settle at
+speed 2 (120 ms), so steps start exactly 710 ms apart.
+
+### Timing, fixed
+
+- One timeline (`motion::Schedule`, diagram in `crates/motion/AGENTS.md`): Hold 560, Move 620,
+  Settle 240 ms; phases and roles are types (`Phase`, `Role`), and every part of the move gets
+  its window from `Schedule::part`. No stagger: all pieces and copies of a firing leave and land
+  together.
+- Phase ends are deadlines from the step's start (`Schedule::until`, `performance.now`), so
+  drawing the new term happens inside Hold's budget, not after it.
+- Normalize and To WHNF run at one steady cadence, `Schedule::RUN` (speed 2), from the first step
+  to the last; Step and clicks use `Schedule::STEP` (speed 1).
+- A renaming before β or ζ is its own step on the same timeline (rule card shows α, Hold, rename,
+  Settle), not a separate constant.
+- A result with no element of its own lands on its nearest drawn ancestor, so a numeral absorbing
+  a successor fades in with the rest of the move instead of snapping in early.
+- The glide sizes the boxes around the result back to their old sizes before measuring where the
+  siblings were, so the context slides once, from where it was seen, with no jump before or after.
+- Links (arcs) are hidden during the move and return at its end, inside Settle, with nothing else
+  moving.
+- `crates/motion/tests/schedule.rs` pins it: every step lasts the same (1420 ms / 710 ms), every
+  part ends with the move, the move has no stagger, phases follow one another.
+
+Kept: straight lines, fades in place, no scaling, all motion through `motion`; reduced motion
+applies steps at once and skips the timeline.
+
+Still varies, and why: about ±3 ms per phase, from timer granularity and the main thread (a phase
+deadline is a `setTimeout` that can fire a frame late). An animation can finish a frame after its
+phase deadline; its cleanup lands inside Settle, which absorbs it. The α step is one full step
+longer than a plain one by design.
+
+### Height, fixed
+
+- Choice: reserved space everywhere, plus one tabbed lower pane. Nothing is overlaid on the term.
+  Every region has a fixed height and scrolls inside it: the program band (5.6rem: notes, then
+  each `def` as one line of source, horizontally scrollable, instead of a wrapping card per def),
+  the rule card (4.4rem; 5.6rem on narrow screens), the stage, the status line (3.3em), and the
+  pane. The pane's tabs — Trace, Why (shown only while a capture explanation exists; selected
+  when one first appears), Source — share one 15rem panel, so the α panel, the source editor and a
+  parse error never add rows. The trace scrolls inside the panel and keeps the current step in
+  view.
+- Stop is drawn over Step's box (`.rdx-stop`: transparent label, `::after` overlay), so the
+  button keeps its width and the controls never rewrap at phone width.
+- The stage is 20rem (320 px at the blog's 16 px root). The tallest built-in term at blog width,
+  Church numerals mid-run, is 205 px of term plus 66 px of padding: 271 of 320, about 50 px to
+  spare. A larger term (any user source) scrolls inside the stage, both ways; it is never scaled.
+  The widest built-in term at its widest state is 1.73× the stage and scrolls horizontally.
+- Workbench height: 884.17 px on the standalone page (1100 px window) and in the blog post
+  (752 px column); 943.78 px at 390 px (the controls wrap to two rows, fixed from the start).
+
+### What `scripts/steady.mjs` proves
+
+It opens the workbench on the standalone page (1100 px), in the blog post (the local Jekyll at
+:4011, `/assets/redex/` answered from `dist/site`), and on the standalone page at 390 px, with
+motion on. A `requestAnimationFrame` loop compares the workbench's border-box height every frame
+with the first frame's and records any difference (an exact comparison, so any change of 1 px or
+more fails). It then drives, for every example: load, one Step, hover on a badge, Normalize, Back
+twice, de Bruijn on and off, a rename, links off and on, To WHNF, Reset, the trace tab; then the
+automatic α with its Why panel and tab switches, a long trace (`double (double 2)`, more rows than
+the panel shows) normalized and revisited by clicking an early row, a parse error, and a fixed
+source. Each action waits for `aria-busy` to clear, so every frame of every animation is sampled
+(about 5,600 frames per target). It fails on any height change, any page error, or any action
+that throws, and names the action during which the height changed.
+
+On macOS, Chrome's renderer is suspended while the display sleeps: in 3 s of wall time a headless
+page saw 0.84 s of `performance.now` and 38 frames, so a firing's deadlines never arrived and
+long runs stalled at random actions with `aria-busy` still set. Not a workbench bug; `browser.mjs`
+now holds `caffeinate -dimu` for the life of the check, after which the same page sees 3.0 s and
+180 frames.
+
+The post has since moved to `/program-as-proof/`; `scripts/browser.mjs` points there (override
+with `BLOG=`).
+
+Final run: page 884.17 px, blog 884.17 px, narrow 943.78 px, no change on any frame.
+
+Shown to catch a regression: the same run with `.redex .rdx-status { height: auto }` injected
+fails: the status line starts at its content's height (856.05 px workbench) and grows a line during
+`omega`'s Normalize (882.88 px), and the check names that action and the ones after it.
+
+It does not cover the graph and race widgets, user sources other than the ones above, window
+resizes, or font loading (it starts after `document.fonts.ready`).

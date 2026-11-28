@@ -60,7 +60,11 @@ flowchart LR
   `Element::animate` or adds a CSS keyframe for movement or opacity; CSS keyframes are for color
   afterglows only.
 - Motion is direct and calm: things travel in straight lines, appear and disappear by fading in
-  place, and a firing's parts share one `BEAT` and the `Ease` curves.
+  place, and every firing runs on one fixed timeline (`motion::Schedule`: hold, move, settle),
+  the same length for every rule and term size, with no stagger.
+- The workbench never changes height. Each region has a fixed size and scrolls inside it; what
+  appears later (the α panel, the source editor) takes a tab in the lower pane, never new rows.
+  `scripts/steady.mjs` checks it every frame.
 - Keep the three color channels apart: rule ink, binder hue, highlighter.
 - Domain values cross function boundaries as their types (`Name`, `Path`, `Uid`, `Px`, `Ms`,
   `Step`, `Cap`, `Depth`, `Kind`, …), never as bare strings or numbers.
@@ -79,6 +83,8 @@ cargo run --manifest-path crates/lints/Cargo.toml -- --base master
 cargo run --manifest-path crates/lints/Cargo.toml -- --all   # and --only each opt-in rule
 trunk serve                                                   # http://localhost:8001
 scripts/site.sh && npm install && node scripts/reveal.mjs     # host-page build and browser check
+node scripts/steady.mjs   # the workbench's height, every frame (blog target needs Jekyll on :4011)
+node scripts/tempo.mjs    # per-phase timing of each firing, from the performance marks
 ```
 
 ## Taste & Stylistic Tendencies

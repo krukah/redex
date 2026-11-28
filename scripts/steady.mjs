@@ -48,45 +48,50 @@ for (const name of chosen) {
     await page.click(`${W} [data-act="load"]`);
     await idle();
   };
-  const ids = await page.evaluate(() => [...document.querySelectorAll('[data-redex="rules"] [data-ex]')].map(e => e.dataset.ex));
-  for (const id of ids) {
-    await label(`${id}: load`);
-    await page.click(`[data-redex="rules"] [data-ex="${id}"]`);
+  // A step that throws still reports the heights recorded before it.
+  let crash = null;
+  try {
+    const ids = await page.evaluate(() => [...document.querySelectorAll('[data-redex="rules"] [data-ex]')].map(e => e.dataset.ex));
+    for (const id of ids) {
+      await label(`${id}: load`);
+      await page.click(`[data-redex="rules"] [data-ex="${id}"]`);
+      await idle();
+      await act(`${id}: step`, '[data-act="step"]');
+      await label(`${id}: hover a badge`);
+      await page.hover(`${W} .rdx-line .rm`, { timeout: 1000 }).catch(() => {});
+      await act(`${id}: normalize`, '[data-act="nf"]');
+      await act(`${id}: back`, '[data-act="back"]');
+      await act(`${id}: back`, '[data-act="back"]');
+      await act(`${id}: de Bruijn on`, '[data-opt="db"]');
+      await act(`${id}: de Bruijn off`, '[data-opt="db"]');
+      await act(`${id}: rename`, '.rdx-line button.rb');
+      await act(`${id}: links off`, '[data-opt="arcs"]');
+      await act(`${id}: links on`, '[data-opt="arcs"]');
+      await act(`${id}: to WHNF`, '[data-act="whnf"]');
+      await act(`${id}: reset`, '[data-act="reset"]');
+      await act(`${id}: trace tab`, '[data-act="trace"]');
+    }
+    await label('α with its panel: load');
+    await page.click('[data-redex="rules"] [data-ex="capture"]');
     await idle();
-    await act(`${id}: step`, '[data-act="step"]');
-    await label(`${id}: hover a badge`);
-    await page.hover(`${W} .rdx-line .rm`, { timeout: 1000 }).catch(() => {});
-    await act(`${id}: normalize`, '[data-act="nf"]');
-    await act(`${id}: back`, '[data-act="back"]');
-    await act(`${id}: back`, '[data-act="back"]');
-    await act(`${id}: de Bruijn on`, '[data-opt="db"]');
-    await act(`${id}: de Bruijn off`, '[data-opt="db"]');
-    await act(`${id}: rename`, '.rdx-line button.rb');
-    await act(`${id}: links off`, '[data-opt="arcs"]');
-    await act(`${id}: links on`, '[data-opt="arcs"]');
-    await act(`${id}: to WHNF`, '[data-act="whnf"]');
-    await act(`${id}: reset`, '[data-act="reset"]');
-    await act(`${id}: trace tab`, '[data-act="trace"]');
-  }
-  await label('α with its panel: load');
-  await page.click('[data-redex="rules"] [data-ex="capture"]');
-  await idle();
-  await act('α with its panel: step', '[data-act="step"]');
-  await act('α with its panel: trace tab', '[data-act="trace"]');
-  await act('α with its panel: why tab', '[data-act="why"]');
-  await load('a long trace', LONG);
-  await act('a long trace: trace tab', '[data-act="trace"]');
-  await act('a long trace: normalize', '[data-act="nf"]');
-  await act('a long trace: click an early row', '.rdx-trace [data-i="2"]');
-  await load('a parse error', 'λ. x');
-  await load('a fixed source', 'λx. x x');
-  await act('a fixed source: trace tab', '[data-act="trace"]');
-  await page.waitForTimeout(300);
+    await act('α with its panel: step', '[data-act="step"]');
+    await act('α with its panel: trace tab', '[data-act="trace"]');
+    await act('α with its panel: why tab', '[data-act="why"]');
+    await load('a long trace', LONG);
+    await act('a long trace: trace tab', '[data-act="trace"]');
+    await act('a long trace: normalize', '[data-act="nf"]');
+    await act('a long trace: click an early row', '.rdx-trace [data-i="2"]');
+    await load('a parse error', 'λ. x');
+    await load('a fixed source', 'λx. x x');
+    await act('a fixed source: trace tab', '[data-act="trace"]');
+    await page.waitForTimeout(300);
+  } catch (e) { crash = e; }
   const result = await page.evaluate(() => window.steady);
-  const ok = result.bad.length === 0 && errors.length === 0;
+  const ok = !crash && result.bad.length === 0 && errors.length === 0;
   failed ||= !ok;
   console.log(`${name}: workbench ${result.base}px over ${result.frames} frames ${ok ? 'ok' : 'FAIL'}`);
   result.bad.forEach(([l, h]) => console.log(`  ${h}px during ${l}`));
+  if (crash) console.log(`  stopped during ${result.label}: ${String(crash).split('\n')[0]}`);
   errors.forEach(e => console.log(`  page error: ${e}`));
   await page.close();
 }

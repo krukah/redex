@@ -3,6 +3,7 @@
 //   blog  the post on the local Jekyll server, with /assets/redex/ answered from dist/site
 //         (`scripts/site.sh`), so the check runs this build inside the blog's own CSS
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -10,7 +11,7 @@ import { chromium } from 'playwright-core';
 const ROOT = new URL('../', import.meta.url);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm' };
 export const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-export const BLOG = process.env.BLOG || 'http://localhost:4011/firing-redexes-by-hand/';
+export const BLOG = process.env.BLOG || 'http://localhost:4011/program-as-proof/';
 
 // A static server over the repository, falling back to dist/ for the page's own assets; `pages`
 // answers extra paths with fixed HTML.
@@ -28,7 +29,12 @@ export const serve = (pages = {}) => new Promise(ok => {
   }).listen(0, () => ok(server));
 });
 
-export const launch = () => chromium.launch({ executablePath: CHROME });
+// On macOS, Chrome's renderer is suspended while the display sleeps (time and frames stop), which
+// stalls a long check midway; caffeinate keeps the display awake until this process exits.
+export const launch = () => {
+  if (process.platform === 'darwin') spawn('caffeinate', ['-dimu', '-w', String(process.pid)], { stdio: 'ignore' }).unref();
+  return chromium.launch({ executablePath: CHROME });
+};
 
 // Opens one of the two pages in a fresh tab and waits for the workbench to draw.
 export async function open(browser, server, target, { motion = false, width = 1100 } = {}) {

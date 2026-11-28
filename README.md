@@ -11,11 +11,14 @@ cargo test --workspace         # engine, layout and markup tests, against the fr
 scripts/site.sh                # dist/site: redex.js, redex_bg.wasm, redex.css for a host page
 node scripts/bundle.mjs out.html   # one self-contained file (after scripts/site.sh)
 npm install && node scripts/reveal.mjs   # browser check of two widget groups on one page
+node scripts/steady.mjs    # the workbench never changes height (every frame, every state)
+node scripts/tempo.mjs     # how long each phase of each firing takes
 ```
 
 Needs the `wasm32-unknown-unknown` target, Trunk, and for `scripts/site.sh` a `wasm-bindgen` CLI
 of the version in `Cargo.lock` plus `wasm-opt`. `package.json` exists only to pin
-`playwright-core` for `scripts/reveal.mjs`; `scripts/bundle.mjs` needs no packages.
+`playwright-core` for the browser checks (`reveal.mjs`, `steady.mjs`, `tempo.mjs`, sharing
+`browser.mjs`); `scripts/bundle.mjs` needs no packages.
 
 ## Layout
 
@@ -37,7 +40,7 @@ of the version in `Cargo.lock` plus `wasm-opt`. `package.json` exists only to pi
 | `bin/page` | The standalone page (`index.html`, `site.css`), styled after the Lean documentation (Verso). |
 | `crates/lints` | House Lint, outside the workspace. |
 | `fixtures/` | Frozen regression data the tests check against (`engine/` per term, `dom/` per drawing). |
-| `scripts/` | `site.sh` (host-page build), `bundle.mjs` (single-file artifact), `reveal.mjs` (browser check). |
+| `scripts/` | `site.sh` (host-page build), `bundle.mjs` (single-file artifact), `reveal.mjs`, `steady.mjs`, `tempo.mjs` (browser checks, over `browser.mjs`). |
 | `docs/` | The port plan and its ledger, and the todo list. |
 
 ## Core model
