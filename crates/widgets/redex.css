@@ -276,7 +276,3 @@
 @media (prefers-reduced-motion: reduce) {
   .redex *, .redex *::before, .redex *::after { animation: none !important; transition: none !important; }
 }
-
-/* binding links step aside while the term rearranges, and return once it settles */
-.redex .rdx-arcs { transition: opacity .25s; }
-.redex .rdx-stage.moving .rdx-arcs { opacity: 0; transition: none; }

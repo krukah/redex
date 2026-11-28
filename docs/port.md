@@ -431,7 +431,7 @@ speed 2 (120 ms), so steps start exactly 710 ms apart.
 - The glide sizes the boxes around the result back to their old sizes before measuring where the
   siblings were, so the context slides once, from where it was seen, with no jump before or after.
 - Links (arcs) are hidden during the move and return at its end, inside Settle, with nothing else
-  moving.
+  moving (since changed: they fade out and back in through `motion`; see Legibility).
 - `crates/motion/tests/schedule.rs` pins it: every step lasts the same (1420 ms / 710 ms), every
   part ends with the move, the move has no stagger, phases follow one another.
 
@@ -477,6 +477,14 @@ ghosts it reports when each starts and stops moving.
   travels to where it lands, the old binder fades as the new one appears, and the context glides
   around the wider name. `tempo.mjs` shows α as a row of its own, with the same timings as any
   step.
+- Found: the binding links vanished in one frame at the start of every move (a CSS class set
+  their opacity to 0 with no transition) and came back through a CSS opacity transition, outside
+  `motion`. Fixed: `lift` pins the old links as a ghost that fades out in place with the husk
+  (`Role::Fade`). The links drawn for the new layout stay hidden through the move and fade in
+  during Settle (`Role::Relink`, the one part outside the move). The CSS rules and the `moving`
+  class are gone. `Role` now names its phase, and `Schedule::part` counts from the top of the
+  move; the tests check that every part runs inside its phase, that nothing in the move is
+  staggered, and that nothing plays during Hold.
 - Measured after these fixes, on `mix`, `beta`, `church`, `delta`, `alpha`, `capture`, a free-`f`
   `Nat.rec`, a let-capture and `double (double 2)`, every step by Step: no node visible
   throughout moves during Hold or Settle, no first or last frame of a move carries a node more

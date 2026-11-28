@@ -54,12 +54,21 @@ impl Schedule {
         Motion::wait(start + self.end(phase) - Self::now())
     }
 
-    /// A part's tween options, written at speed 1 as `Motion` expects; the clock scales them when
-    /// the move plays.
+    /// When a phase starts, counted from the start of the move, at speed 1.
+    pub fn since_move(phase: Phase) -> Ms {
+        Phase::ALL
+            .iter()
+            .skip_while(|p| **p != Phase::Move)
+            .take_while(|p| **p != phase)
+            .fold(Ms::ZERO, |sum, p| sum + p.ms())
+    }
+
+    /// A part's tween options, counted from the start of the move and written at speed 1 as
+    /// `Motion` expects; the clock scales them when the move plays.
     pub fn part(role: Role) -> Tween {
-        let (start, length) = role.window();
+        let ((start, length), phase) = (role.window(), role.phase());
         Tween::default()
-            .ms(Phase::Move.ms() * length)
-            .delay(Phase::Move.ms() * start)
+            .ms(phase.ms() * length)
+            .delay(Self::since_move(phase) + phase.ms() * start)
     }
 }

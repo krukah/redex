@@ -1,7 +1,9 @@
-/// A part the move phase plays, and its fixed window inside the phase, as fractions of it.
+use crate::*;
+
+/// A part a step plays after its hold, the phase it belongs to, and its fixed window there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
-    /// The rest of the redex fades out where it stands.
+    /// The rest of the redex, and the old binding links, fade out where they stand.
     Fade,
     /// A bound piece travels in a straight line to a place the result uses it.
     Fly,
@@ -11,17 +13,33 @@ pub enum Role {
     Arrive,
     /// The context slides and resizes from the old layout to the new one.
     Glide,
+    /// The binding links, drawn for the new layout, fade in once nothing moves.
+    Relink,
 }
 
 impl Role {
-    pub const ALL: [Role; 5] = [Self::Fade, Self::Fly, Self::Swap, Self::Arrive, Self::Glide];
+    pub const ALL: [Role; 6] = [
+        Self::Fade,
+        Self::Fly,
+        Self::Swap,
+        Self::Arrive,
+        Self::Glide,
+        Self::Relink,
+    ];
 
-    /// Where the part starts and how long it runs, as fractions of the move phase.
+    pub fn phase(self) -> Phase {
+        match self {
+            Self::Relink => Phase::Settle,
+            _ => Phase::Move,
+        }
+    }
+
+    /// Where the part starts and how long it runs, as fractions of its phase.
     pub fn window(self) -> (f64, f64) {
         match self {
             Self::Fade => (0.0, 0.55),
             Self::Swap => (0.0, 0.45),
-            Self::Fly | Self::Arrive | Self::Glide => (0.0, 1.0),
+            Self::Fly | Self::Arrive | Self::Glide | Self::Relink => (0.0, 1.0),
         }
     }
 }

@@ -136,9 +136,10 @@ impl Match {
     }
 }
 
-/// The redex pinned over the page before a step, and the layout it left.
+/// The redex and the binding links pinned over the page before a step, and the layout they left.
 struct Lifted {
     husk: Option<Element>,
+    links: Option<Element>,
     pieces: Vec<Piece>,
     stage: Option<DomRect>,
     layout: HashMap<Uid, DomRect>,
@@ -147,6 +148,10 @@ struct Lifted {
 impl Lifted {
     fn husk(&self) -> Option<&Element> {
         self.husk.as_ref()
+    }
+
+    fn links(&self) -> Option<&Element> {
+        self.links.as_ref()
     }
 
     fn pieces(&self) -> &[Piece] {
@@ -739,6 +744,10 @@ impl Bench {
         }
         Lifted {
             husk,
+            links: self
+                .stage()
+                .and_then(|stage| Doc::q(&stage, &Class::Arcs.into()))
+                .and_then(|svg| Ghost::pin(&svg, None, false, &[])),
             pieces: pieces
                 .into_iter()
                 .map(|pc| {
@@ -772,6 +781,7 @@ impl Bench {
                 lifted
                     .husk()
                     .into_iter()
+                    .chain(lifted.links())
                     .chain(lifted.pieces().iter().filter_map(Piece::ghost))
                     .map(|g| Motion::exit(g, Schedule::part(Role::Fade)))
                     .collect(),
@@ -858,7 +868,8 @@ impl Bench {
     }
 
     /// Boxes that enclose the result change size, nodes beside it slide, new context fades in,
-    /// and the stage resizes. Binding links step aside until the layout settles.
+    /// and the stage resizes. The old binding links fade where they were; the new ones, drawn for
+    /// the new layout, stay hidden through the move and fade in during Settle.
     fn glide(self: &Rc<Self>, lifted: &Lifted, result: &Element, clock: Clock) -> Motion {
         let (Some(stage), Some(line)) = (self.stage(), self.line()) else {
             return Motion::none();
@@ -882,17 +893,18 @@ impl Bench {
         )));
         let mut moves = vec![sized];
         Self::visit(&line, lifted.layout(), result, &mut moves);
-        Doc::add(&stage, &[Class::Gliding]);
         let me = self.clone();
         Motion::all(vec![
             Motion::all(moves),
-            Motion::after(
-                Phase::Move.ms(),
-                Motion::act(move || {
-                    Doc::remove(&stage, &[Class::Gliding]);
-                    me.links();
-                }),
-            ),
+            lifted
+                .links()
+                .map_or_else(Motion::none, |g| Motion::exit(g, Schedule::part(Role::Fade))),
+            Doc::q(&stage, &Class::Arcs.into()).map_or_else(Motion::none, |svg| {
+                Motion::all(vec![
+                    Motion::enter(&svg, Schedule::part(Role::Relink)),
+                    Motion::after(Phase::Move.ms(), Motion::act(move || me.links())),
+                ])
+            }),
         ])
     }
 

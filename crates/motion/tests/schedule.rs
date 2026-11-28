@@ -13,10 +13,11 @@ fn every_step_lasts_the_same() {
 }
 
 #[test]
-fn every_part_of_the_move_ends_with_the_move() {
+fn every_part_runs_inside_its_phase() {
     Role::ALL.into_iter().for_each(|r| {
-        let part = Schedule::part(r);
-        assert!(part.wait() + part.duration() <= Phase::Move.ms(), "{r:?}");
+        let (part, from) = (Schedule::part(r), Schedule::since_move(r.phase()));
+        assert!(part.wait() >= from, "{r:?}");
+        assert!(part.wait() + part.duration() <= from + r.phase().ms(), "{r:?}");
     });
 }
 
@@ -24,7 +25,15 @@ fn every_part_of_the_move_ends_with_the_move() {
 fn the_move_has_no_stagger() {
     Role::ALL
         .into_iter()
+        .filter(|r| r.phase() == Phase::Move)
         .for_each(|r| assert_eq!(Schedule::part(r).wait(), Ms::ZERO, "{r:?}"));
+}
+
+#[test]
+fn nothing_plays_during_the_hold() {
+    Role::ALL
+        .into_iter()
+        .for_each(|r| assert_ne!(r.phase(), Phase::Hold, "{r:?}"));
 }
 
 #[test]
