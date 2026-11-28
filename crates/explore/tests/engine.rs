@@ -22,6 +22,12 @@ impl Engine {
     fn kinds(run: &Run) -> Vec<Kind> {
         run.rows().iter().skip(1).filter_map(strategy::Row::kind).collect()
     }
+
+    fn uids(t: &Term) -> Vec<Uid> {
+        std::iter::once(t.uid())
+            .chain(t.kids().into_iter().flat_map(|(_, k)| Self::uids(k)))
+            .collect()
+    }
 }
 
 #[test]
@@ -169,5 +175,27 @@ fn every_rule_binds_exactly_the_pattern_variables_its_schema_mentions() {
                 .iter()
                 .for_each(|b| assert!(vars.contains(&b.var()), "{} {:?} {}", e.id(), r.kind(), b.var()));
         });
+    });
+}
+
+/// The workbench finds a node on screen by its uid, before and after a step, so no contraction may
+/// leave one node in two places: a duplicated piece is a copy that records `from`.
+#[test]
+fn a_step_never_puts_one_node_in_two_places() {
+    Example::all().for_each(|e| {
+        let p = Program::parse(&e.src()).expect("parses");
+        Run::new(p.term(), p.env(), Strategy::Normal, Cap::new(40))
+            .rows()
+            .iter()
+            .flat_map(|row| {
+                row.term()
+                    .redexes(p.env())
+                    .into_iter()
+                    .map(|r| row.term().step(&r, p.env()))
+            })
+            .map(|t| Engine::uids(&t))
+            .for_each(|uids| {
+                assert_eq!(uids.iter().collect::<std::collections::HashSet<&Uid>>().len(), uids.len(), "{}", e.id());
+            });
     });
 }

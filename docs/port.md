@@ -443,6 +443,26 @@ deadline is a `setTimeout` that can fire a frame late). An animation can finish 
 phase deadline; its cleanup lands inside Settle, which absorbs it. The α step is one full step
 longer than a plain one by design.
 
+### Legibility, verified frame by frame
+
+A probe (not kept as a gate; it ran from a scratch script over `browser.mjs`) records, every
+animation frame of every firing, the on-screen box of each drawn node (by uid, with its effective
+opacity) and of each ghost, and splits the frames by the `Cue` marks. For nodes visible throughout
+it checks: nothing moves during Hold or Settle; on the first and last frames of the move no node
+covers more than a fifth of its total travel (a jump); the path a node travels is no longer than
+the straight line between where it was and where it lands (a detour or a second movement). For
+ghosts it reports when each starts and stops moving.
+
+- Found: ι reused `s` and `n` by reference (`clone`), so after `Nat.rec z s (succ n)` fired the
+  term held two copies of `s` with the same uids. The workbench keys the old layout by uid, so the
+  glide sent a copy from where the other copy was: in `Nat.rec z f 3`, the `f` outside the next
+  redex would slide in from the redex's `f`. The JS original did the same, so the frozen fixtures
+  had it too. Fixed: ι copies `z`, `s` and `n` (`Term::copy`, which records `from`) like every
+  other rule. `crates/explore/tests/engine.rs` now checks that no step of any example's run leaves
+  one uid in two places. The fixtures changed deliberately: 20 random fixtures, 75 engine values
+  and 58 blocks views, every difference only in fresh ids and the new `data-from` (checked by
+  stripping ids and comparing).
+
 ### Height, fixed
 
 - Choice: reserved space everywhere, plus one tabbed lower pane. Nothing is overlaid on the term.

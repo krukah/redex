@@ -91,8 +91,8 @@ impl Reduce for Term {
             Some((z, s, n)) => {
                 let m = n.kid('a').expect("succ has an argument");
                 Term::app(
-                    Term::app(s.clone(), m.clone()),
-                    Term::app(Term::app(Term::app(Term::cons(Prim::Rec), z.clone()), s.clone()), m.clone()),
+                    Term::app(s.copy(), m.copy()),
+                    Term::app(Term::app(Term::app(Term::cons(Prim::Rec), z.copy()), s.copy()), m.copy()),
                 )
             }
             None => self.clone(),
