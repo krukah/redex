@@ -2,8 +2,8 @@ use units::*;
 
 use crate::*;
 
-/// Options for one tween. Unset fields take the primitive's defaults, then `BEAT`, no delay,
-/// `Ease::Move`. `keep` leaves the final frame applied; otherwise the animation is cancelled when
+/// Options for one tween. Unset fields take the primitive's defaults, then the length of the
+/// step's move, no delay, `Ease::Move`. `keep` leaves the final frame applied; otherwise the animation is cancelled when
 /// it ends, so the element returns to its own styles.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Tween {
@@ -57,7 +57,7 @@ impl Tween {
 
     pub fn duration(&self) -> Ms {
         let Self { ms, .. } = self;
-        ms.unwrap_or(Motion::BEAT)
+        ms.unwrap_or(Phase::Move.ms())
     }
 
     pub fn wait(&self) -> Ms {

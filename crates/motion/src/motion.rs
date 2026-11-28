@@ -14,8 +14,9 @@ use crate::*;
 pub struct Motion(Box<dyn FnOnce(Clock) -> Pin<Box<dyn Future<Output = ()>>>>);
 
 impl Motion {
-    /// The length of one firing's movement, at speed 1.
-    pub const BEAT: Ms = Ms::new(620.0);
+    /// How long past its end a tween waits for a stalled animation before it resolves anyway. The
+    /// step never waits on it: its phases end at deadlines (`Schedule::until`).
+    const SLACK: Ms = Ms::new(60.0);
 
     pub fn new<F>(play: F) -> Self
     where
@@ -86,7 +87,7 @@ impl Motion {
                 .and_then(|p| p.dyn_into::<js_sys::Promise>().ok())
                 .map_or_else(|| Box::pin(async {}) as Pin<Box<dyn Future<Output = ()>>>, |p| Box::pin(Settle::new(&p)));
             Box::pin(async move {
-                First::new(finished, Self::wait(delay + duration + Ms::new(60.0))).await;
+                First::new(finished, Self::wait(delay + duration + Self::SLACK)).await;
                 if !o.keeps() {
                     Self::call(&a, "cancel", &[]);
                 }
@@ -134,7 +135,7 @@ impl Motion {
                     )],
                     &[(Prop::Opacity, 0.into())],
                 ],
-                o.over(Tween::default().ms(Self::BEAT * 0.55).ease(Ease::Exit)).keep(),
+                o.over(Schedule::part(Role::Fade).ease(Ease::Exit)).keep(),
             ),
             Self::act(move || gone.remove()),
         ])
@@ -197,7 +198,7 @@ impl Motion {
 
     /// `a` fades out while `b` fades in; both stay.
     pub fn crossfade(a: &Element, b: &Element, o: Tween) -> Self {
-        let o = o.over(Tween::default().ms(Self::BEAT * 0.45).ease(Ease::Exit)).keep();
+        let o = o.over(Schedule::part(Role::Swap).ease(Ease::Exit)).keep();
         Self::all(vec![
             Self::tween(a, &[&[(Prop::Opacity, 1.into())], &[(Prop::Opacity, 0.into())]], o),
             Self::tween(b, &[&[(Prop::Opacity, 0.into())], &[(Prop::Opacity, 1.into())]], o),
