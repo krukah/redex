@@ -9,6 +9,7 @@ use crate::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Widget {
     Rules,
+    Examples,
     Workbench,
     Graph,
     Race,
@@ -20,6 +21,7 @@ impl std::str::FromStr for Widget {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "rules" => Ok(Self::Rules),
+            "examples" => Ok(Self::Examples),
             "workbench" => Ok(Self::Workbench),
             "graph" => Ok(Self::Graph),
             "race" => Ok(Self::Race),
@@ -32,7 +34,7 @@ impl std::str::FromStr for Widget {
 pub struct Mount;
 
 impl Mount {
-    /// `data-redex="rules|workbench|graph|race"` picks the widget; `data-example="<id>"` on any of
+    /// `data-redex="rules|examples|workbench|graph|race"` picks the widget; `data-example="<id>"` on any of
     /// them picks the first example (default: beta).
     pub fn all(scope: &web_sys::Element) -> Session {
         let session = Session::default();
@@ -49,7 +51,8 @@ impl Mount {
             leptos::mount::mount_to(el.clone(), move || {
                 provide_context(stored);
                 match widget {
-                    Widget::Rules => view! { <Deck/> }.into_any(),
+                    Widget::Rules => view! { <Deck shelf=Shelf::Rules/> }.into_any(),
+                    Widget::Examples => view! { <Deck shelf=Shelf::Examples/> }.into_any(),
                     Widget::Workbench => view! { <Workbench/> }.into_any(),
                     Widget::Graph => view! { <Paths/> }.into_any(),
                     Widget::Race => view! { <Lanes/> }.into_any(),

@@ -43,7 +43,7 @@ const print = (title, rows) => {
 };
 
 for (const id of ids) {
-  await page.click(`[data-redex="rules"] [data-ex="${id}"]`);
+  await page.click(`:is([data-redex="rules"],[data-redex="examples"]) [data-ex="${id}"]`);
   await page.evaluate(() => performance.clearMarks());
   for (;;) {
     const ready = await page.evaluate(() => !document.querySelector('[data-redex="workbench"] [data-act="step"]').disabled);

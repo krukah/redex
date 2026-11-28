@@ -26,6 +26,7 @@
         <p>Each box is one piece of syntax: a <b>λ</b> box with its binder on a tab, an application box with the function first and its arguments after it, a pair box. A variable is a tag in the color of the binder it belongs to, and the arcs above link each one to that binder.</p>
         <p>A badge on a box’s corner marks a redex. Hover it to see the rule match: the rule’s pattern variables and the pieces of the term they stand for get the same highlighter color. Click it and each piece moves to where the result uses it. <b>Step</b> fires the leftmost-outermost redex, <b>To WHNF</b> reduces only the head, and <b>Normalize</b> runs until no redex is left.</p>
         <div data-redex="rules"></div>
+        <div data-redex="examples"></div>
         <div data-redex="workbench" data-example="beta"></div>
       </section>
 

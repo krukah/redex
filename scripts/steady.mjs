@@ -56,10 +56,10 @@ for (const name of chosen) {
   // A step that throws still reports the heights recorded before it.
   let crash = null;
   try {
-    const ids = await page.evaluate(() => [...document.querySelectorAll('[data-redex="rules"] [data-ex]')].map(e => e.dataset.ex));
+    const ids = await page.evaluate(() => [...document.querySelectorAll(':is([data-redex="rules"],[data-redex="examples"]) [data-ex]')].map(e => e.dataset.ex));
     for (const id of ids) {
       await label(`${id}: load`);
-      await page.click(`[data-redex="rules"] [data-ex="${id}"]`);
+      await page.click(`:is([data-redex="rules"],[data-redex="examples"]) [data-ex="${id}"]`);
       await idle();
       await act(`${id}: step`, '[data-act="step"]');
       await label(`${id}: hover a badge`);
@@ -77,7 +77,7 @@ for (const name of chosen) {
       await act(`${id}: trace tab`, '[data-act="trace"]');
     }
     await label('α with its panel: load');
-    await page.click('[data-redex="rules"] [data-ex="capture"]');
+    await page.click(':is([data-redex="rules"],[data-redex="examples"]) [data-ex="capture"]');
     await idle();
     await act('α with its panel: step', '[data-act="step"]');
     await act('α with its panel: trace tab', '[data-act="trace"]');

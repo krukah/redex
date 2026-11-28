@@ -7,20 +7,41 @@ use syntax::*;
 
 use crate::*;
 
-/// The deck: one tile per rule and one per example, on a shared column grid so the two rows line
-/// up. Every tile has the same parts (a face, a name, then its details), each on its own grid row.
-/// An example tile's face is a thumbnail of its reduction graph.
+/// Which row of tiles a deck holds. The two rows are separate widgets so prose can sit between
+/// them; both use the same column grid, so at one width their columns line up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shelf {
+    Rules,
+    Examples,
+}
+
+impl Shelf {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Rules => "Rules",
+            Self::Examples => "Examples",
+        }
+    }
+
+    fn tiles(self) -> Vec<Node> {
+        match self {
+            Self::Rules => Example::RULES.iter().map(|r| Tiles::rule(*r)).collect(),
+            Self::Examples => Example::MORE.iter().map(|m| Tiles::example(*m)).collect(),
+        }
+    }
+}
+
+/// A deck: one tile per rule or per example. Every tile has the same parts (a face, a name, then
+/// its details), each on its own grid row. An example tile's face is a thumbnail of its reduction
+/// graph.
 pub struct Tiles;
 
 impl Tiles {
-    pub fn node() -> Node {
-        let label = |s: &str| Node::el(Tag::Div).class([Class::Label]).kid(Node::text(s));
+    pub fn node(shelf: Shelf) -> Node {
         Node::el(Tag::Div)
             .class([Class::Deck])
-            .kid(label("Rules"))
-            .kids(Example::RULES.iter().map(|r| Self::rule(*r)))
-            .kid(label("Examples"))
-            .kids(Example::MORE.iter().map(|m| Self::example(*m)))
+            .kid(Node::el(Tag::Div).class([Class::Label]).kid(Node::text(shelf.label())))
+            .kids(shelf.tiles())
     }
 
     /// A rule's tile: its letter, its name, what it does and its schema.
@@ -72,21 +93,21 @@ impl Tiles {
     }
 
     /// Draws the tiles once, into an empty deck.
-    fn fill(wrap: &web_sys::Element) {
+    fn fill(wrap: &web_sys::Element, shelf: Shelf) {
         if wrap.child_element_count() == 0 {
-            Doc::fill(wrap, &Self::node());
+            Doc::fill(wrap, &Self::node(shelf));
         }
     }
 }
 
 #[component]
-pub fn Deck() -> impl IntoView {
+pub fn Deck(shelf: Shelf) -> impl IntoView {
     let session = expect_context::<StoredValue<Session, LocalStorage>>().get_value();
     let wrap = NodeRef::<html::Div>::new();
     let shown = session.clone();
     session.on(move |e| {
         let Some(wrap) = wrap.get_untracked() else { return };
-        Tiles::fill(&wrap);
+        Tiles::fill(&wrap, shelf);
         if e != Event::Load {
             return;
         }
@@ -96,7 +117,7 @@ pub fn Deck() -> impl IntoView {
             Doc::put(el, &Attr::Pressed(on));
         });
     });
-    wrap.on_load(|el| Tiles::fill(&el));
+    wrap.on_load(move |el| Tiles::fill(&el, shelf));
     let click = move |e: web_sys::MouseEvent| {
         if let Some(ex) = Doc::target(&e)
             .and_then(|t| Doc::closest(&t, &Query::Has(Data::Ex)))

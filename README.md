@@ -66,6 +66,7 @@ Widgets are independent `<div>`s, so prose can sit between them:
 
 <p>…</p>
 <div data-redex="rules"></div>
+<div data-redex="examples"></div>
 <div data-redex="workbench" data-example="beta"></div>
 <div data-redex="graph"></div>
 <div data-redex="race"></div>
