@@ -19,7 +19,7 @@ impl Tiles {
             .class([Class::Deck])
             .kid(label("Rules"))
             .kids(Example::RULES.iter().map(|r| Self::rule(*r)))
-            .kid(label("More examples"))
+            .kid(label("Examples"))
             .kids(Example::MORE.iter().map(|m| Self::example(*m)))
     }
 
