@@ -23,6 +23,29 @@ impl Engine {
         run.rows().iter().skip(1).filter_map(strategy::Row::kind).collect()
     }
 
+    /// The α step the workbench fires before a capturing β or ζ: the binder's body prepared.
+    fn alpha(t: &Term, r: &Redex) -> Option<Term> {
+        let node = t.at(r.path())?;
+        let (at, arg) = match (r.kind(), node.shape()) {
+            (Kind::Beta, Shape::App(_, a)) => (r.path().child('f'), a.clone()),
+            (Kind::Zeta, Shape::Let(_, v, _)) => (r.path().clone(), v.clone()),
+            _ => return None,
+        };
+        let (Shape::Lam(x, b) | Shape::Let(x, _, b)) = t.at(&at)?.shape() else {
+            return None;
+        };
+        let mut log = Vec::new();
+        let body = b.prepare(x, &arg.fv(), &mut log);
+        (!log.is_empty()).then(|| t.replace(&at.child('b'), body))
+    }
+
+    fn froms(t: &Term) -> Vec<Uid> {
+        t.from()
+            .into_iter()
+            .chain(t.kids().into_iter().flat_map(|(_, k)| Self::froms(k)))
+            .collect()
+    }
+
     fn uids(t: &Term) -> Vec<Uid> {
         std::iter::once(t.uid())
             .chain(t.kids().into_iter().flat_map(|(_, k)| Self::uids(k)))
@@ -196,6 +219,33 @@ fn a_step_never_puts_one_node_in_two_places() {
             .map(|t| Engine::uids(&t))
             .for_each(|uids| {
                 assert_eq!(uids.iter().collect::<std::collections::HashSet<&Uid>>().len(), uids.len(), "{}", e.id());
+            });
+    });
+}
+
+// A piece flies to the nodes built from it, so `from` names a node on screen (the drawn term or a
+// definition); a capturing β or ζ fires as an α step and then the step, as in the workbench.
+#[test]
+fn every_new_node_comes_from_a_node_on_screen() {
+    Example::all().for_each(|e| {
+        let p = Program::parse(&e.src()).expect("parses");
+        let check = |before: &Term, after: &Term| {
+            let seen = std::iter::once(before)
+                .chain(p.env().iter().map(|(_, b)| b))
+                .flat_map(Engine::uids)
+                .collect::<std::collections::HashSet<Uid>>();
+            assert!(Engine::froms(after).iter().all(|f| seen.contains(f)), "{}: {}", e.id(), after.text());
+        };
+        Run::new(p.term(), p.env(), Strategy::Normal, Cap::new(40))
+            .rows()
+            .iter()
+            .flat_map(|row| row.term().redexes(p.env()).into_iter().map(move |r| (row.term(), r)))
+            .for_each(|(t, r)| {
+                t.strip();
+                let renamed = Engine::alpha(t, &r).unwrap_or_else(|| t.clone());
+                check(t, &renamed);
+                renamed.strip();
+                check(&renamed, &renamed.step(&r, p.env()));
             });
     });
 }

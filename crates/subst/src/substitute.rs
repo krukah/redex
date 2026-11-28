@@ -5,7 +5,8 @@ use term::*;
 /// Substitution on terms. Every node built from an old one records it in `from`.
 pub trait Substitute {
     /// `t[x := s]`, renaming a binder only when it would capture a free variable of `s` (`fvs`).
-    /// Copies of `s` carry `mark`.
+    /// Copies of `s` carry `mark`; a marked substitution is a renaming, and each variable it
+    /// rewrites comes `from` the occurrence it replaces.
     fn subst(&self, x: &Name, s: &Term, fvs: &HashSet<Name>, mark: Option<Mark>) -> Term;
     /// `t[x := s]` with `fvs` computed from `s`.
     fn substitute(&self, x: &Name, s: &Term) -> Term;
@@ -28,7 +29,7 @@ impl Substitute for Term {
     fn subst(&self, x: &Name, s: &Term, fvs: &HashSet<Name>, mark: Option<Mark>) -> Term {
         match self.shape() {
             Shape::Var(n) if n == x => match mark {
-                Some(m) => s.copy().marked(m),
+                Some(m) => s.copy().derived(self).marked(m),
                 None => s.copy(),
             },
             Shape::Var(_) | Shape::Const(_) => self.clone(),

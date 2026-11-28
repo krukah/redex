@@ -52,9 +52,10 @@ impl Term {
         Self::make(Shape::Proj(i, t))
     }
 
-    /// Records that this node was built from `old`.
+    /// Records that this node was built from `old`, or from what `old` was built from when `old`
+    /// is itself new in this step (a renaming then a substitution), so `from` names a drawn node.
     pub fn derived(self, old: &Term) -> Self {
-        self.0.set_from(Some(old.uid()));
+        self.0.set_from(Some(old.from().unwrap_or(old.uid())));
         self
     }
 
