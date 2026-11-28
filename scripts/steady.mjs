@@ -2,11 +2,13 @@
 // every step with motion on, the automatic α with its panel, rename, de Bruijn, back, reset,
 // normalize, a long trace, the source editor and a parse error) on the standalone page and in the
 // blog post, samples the workbench's height on every animation frame, and fails on any change.
+// With reduced motion it also fails on any animation running on any frame.
 // Usage: npm install && trunk build --release && scripts/site.sh && node scripts/steady.mjs [targets…]
-//   targets: page, blog, narrow (the standalone page at phone width); default all three
+//   targets: page, blog, narrow (the standalone page at phone width), still (the standalone page
+//   with reduced motion); default all four
 import { serve, launch, open } from './browser.mjs';
 
-const TARGETS = { page: ['page', 1100], blog: ['blog', 1280], narrow: ['page', 390] };
+const TARGETS = { page: ['page', 1100, true], blog: ['blog', 1280, true], narrow: ['page', 390, true], still: ['page', 1100, false] };
 const LONG = 'def double := λn. Nat.rec 0 (λk r. succ (succ r)) n\ndouble (double 2)';
 const chosen = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(TARGETS);
 const server = await serve();
@@ -14,23 +16,26 @@ const browser = await launch();
 let failed = false;
 
 for (const name of chosen) {
-  const [target, width] = TARGETS[name];
-  const { page, errors } = await open(browser, server, target, { motion: true, width });
+  const [target, width, motion] = TARGETS[name];
+  const { page, errors } = await open(browser, server, target, { motion, width });
   const W = '[data-redex="workbench"]';
   await page.evaluate(() => document.fonts.ready);
-  // Every frame, from here on, compare the workbench's height with the first one seen.
-  await page.evaluate(w => {
+  // Every frame, from here on, compare the workbench's height with the first one seen; with
+  // reduced motion, nothing may animate at all.
+  await page.evaluate(([w, still]) => {
     const el = document.querySelector(w);
     const base = el.getBoundingClientRect().height;
     window.steady = { base, frames: 0, bad: [], label: 'start' };
     const tick = () => {
       const h = el.getBoundingClientRect().height;
+      const moving = still ? document.getAnimations().length : 0;
       window.steady.frames++;
-      if (h !== base && window.steady.bad.length < 20) window.steady.bad.push([window.steady.label, h]);
+      if (h !== base && window.steady.bad.length < 20) window.steady.bad.push([window.steady.label, `${h}px`]);
+      if (moving && window.steady.bad.length < 20) window.steady.bad.push([window.steady.label, `${moving} animations`]);
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, W);
+  }, [W, !motion]);
   const label = l => page.evaluate(x => { window.steady.label = x; }, l);
   const idle = () => page.waitForFunction(w => document.querySelector(w).getAttribute('aria-busy') !== 'true', W, { timeout: 120000 });
   const act = async (l, sel) => {
@@ -90,7 +95,7 @@ for (const name of chosen) {
   const ok = !crash && result.bad.length === 0 && errors.length === 0;
   failed ||= !ok;
   console.log(`${name}: workbench ${result.base}px over ${result.frames} frames ${ok ? 'ok' : 'FAIL'}`);
-  result.bad.forEach(([l, h]) => console.log(`  ${h}px during ${l}`));
+  result.bad.forEach(([l, what]) => console.log(`  ${what} during ${l}`));
   if (crash) console.log(`  stopped during ${result.label}: ${String(crash).split('\n')[0]}`);
   errors.forEach(e => console.log(`  page error: ${e}`));
   await page.close();
