@@ -135,9 +135,10 @@
 .redex .rdx-binds { gap: 1.1rem; color: var(--rdx-muted); }
 .redex .rdx-bind code { color: var(--rdx-ink); }
 .redex .rdx-scroll { overflow-x: auto; border: 1px solid var(--rdx-line); background: var(--rdx-sunk); }
-.redex > .rdx-scroll { height: 20rem; overflow: auto; }
+.redex > .rdx-scroll { height: 20rem; overflow: auto; margin-inline: calc(50% - 50vw); border-inline: 0; }
 .redex .rdx-stage { position: relative; display: inline-block; vertical-align: top; min-width: 100%; padding: 2.8rem 1.25rem 1.3rem; font-size: 1.15rem; }
-.redex > .rdx-scroll > .rdx-stage { min-height: 100%; }
+.redex > .rdx-scroll > .rdx-stage { display: inline-flex; min-height: 100%; }
+.redex > .rdx-scroll > .rdx-stage > .rdx-line { margin: auto; }
 .redex .rdx-stage.small { font-size: 1rem; padding-top: 2.6rem; }
 .redex .rdx-stage.flat { padding-top: 1.1rem; padding-bottom: 1rem; }
 .redex .rdx-arcs { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }

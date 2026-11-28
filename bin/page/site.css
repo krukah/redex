@@ -13,7 +13,7 @@
   --code-font: "Source Code Pro", "Noto Sans Mono", ui-monospace, monospace;
 }
 html { font-size: 16px; scroll-padding-top: calc(var(--header-h) + 1rem); }
-body { margin: 0; background: var(--page-bg); color: var(--page-ink); font-family: var(--text-font); }
+body { margin: 0; overflow-x: clip; background: var(--page-bg); color: var(--page-ink); font-family: var(--text-font); }
 a { color: var(--page-link); }
 code { font-family: var(--code-font); font-size: .92em; font-variant-ligatures: none; }
 
