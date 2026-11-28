@@ -103,6 +103,9 @@ impl Kind {
             Self::Proj => vec![Binding::piece("a", "ta"), Binding::piece("b", "tb")],
             Self::Eta => vec![Binding::binder("x", ""), Binding::piece("f", "bf")],
             Self::EtaS => vec![Binding::piece("p", "at")],
+            Self::Alpha if matches!(t.shape(), Shape::Lam(..) | Shape::Let(..)) => {
+                vec![Binding::binder("x", ""), Binding::piece("t", "b")]
+            }
             Self::Alpha => vec![],
         }
     }

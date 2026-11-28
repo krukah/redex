@@ -927,12 +927,14 @@ impl Bench {
         }
     }
 
-    /// The α step that must come first when a β or ζ would capture: its term and its trace note.
-    fn rename_first(&self, t: &Term, path: &Path, kind: Kind) -> Option<(Term, Note)> {
+    /// The α step that must come first when a β or ζ would capture: where it renames, its term
+    /// and its trace note. Only the smallest subtree whose text changes is replaced, so every node
+    /// around it keeps its uid and the move can glide them.
+    fn rename_first(&self, t: &Term, path: &Path, kind: Kind) -> Option<(Path, Term, Note)> {
         let redex = t.at(path)?;
-        let (lam, arg) = match (kind, redex.shape()) {
-            (Kind::Beta, Shape::App(f, a)) => (f.clone(), a.clone()),
-            (Kind::Zeta, Shape::Let(_, v, _)) => (redex.clone(), v.clone()),
+        let (lam, arg, at) = match (kind, redex.shape()) {
+            (Kind::Beta, Shape::App(f, a)) => (f.clone(), a.clone(), path.child('f')),
+            (Kind::Zeta, Shape::Let(_, v, _)) => (redex.clone(), v.clone(), path.clone()),
             _ => return None,
         };
         let (Shape::Lam(x, b) | Shape::Let(x, _, b)) = lam.shape() else {
@@ -944,14 +946,10 @@ impl Bench {
             return None;
         }
         self.session().set_capture(b.naive(x, &arg));
+        let region = Self::region(b, &body, at.child('b'));
         Some((
-            t.replace(
-                path,
-                match redex.shape() {
-                    Shape::Let(y, v, _) => Term::local(y.clone(), v.clone(), body),
-                    _ => Term::app(Term::lam(x.clone(), body), arg),
-                },
-            ),
+            region.clone(),
+            t.replace(&region, t.replace(&at.child('b'), body).at(&region)?.clone()),
             Note::from(
                 format!(
                     "{}, so the argument’s free {} stays free",
@@ -969,28 +967,43 @@ impl Bench {
         ))
     }
 
-    /// One step on the schedule: hold, move, settle. A β or ζ that would capture first takes an α
-    /// step of its own, on the same schedule.
-    /// One step on the schedule: hold, move, settle, each ending at a fixed time after the step
-    /// began. A β or ζ that would capture first takes an α step of its own, on the same schedule.
-    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, schedule: Schedule) {
-        Cue::Fire.mark();
-        if let Some((renamed, note)) = self.rename_first(&self.session().term(), &path, kind) {
-            let start = Schedule::now();
-            if Motion::enabled() {
-                self.show_rule(Some((Kind::Alpha, &self.matched(&path, Kind::Alpha))));
-                Cue::Alpha.mark();
-                schedule.until(start, Phase::Hold).await;
-            }
-            self.session().push(Entry::new(renamed, Some(Kind::Alpha), Some(note)));
-            if Motion::enabled() {
-                schedule.until(start, Phase::Settle).await;
-            }
+    /// The smallest subtree, below `at`, where two α-equivalent terms print differently.
+    fn region(old: &Term, new: &Term, at: Path) -> Path {
+        match old
+            .kids()
+            .into_iter()
+            .zip(new.kids())
+            .filter(|((_, a), (_, b))| a.text() != b.text())
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [((c, a), (_, b))] if old.binder() == new.binder() => Self::region(a, b, at.child(*c)),
+            _ => at,
         }
+    }
+
+    /// A firing: one step, after an α step of its own when a β or ζ would capture.
+    async fn fire_at(self: Rc<Self>, path: Path, kind: Kind, schedule: Schedule) {
+        if let Some((region, renamed, note)) = self.rename_first(&self.session().term(), &path, kind) {
+            Cue::Alpha.mark();
+            self.clone()
+                .beat(&region, Kind::Alpha, Entry::new(renamed, Some(Kind::Alpha), Some(note)), schedule)
+                .await;
+        }
+        Cue::Fire.mark();
+        let (now, env) = (self.session().term(), self.session().env());
+        let next = now.replace(&path, now.at(&path).expect("a redex inside the term").contract(kind, &env));
+        self.beat(&path, kind, Entry::new(next, Some(kind), None), schedule)
+            .await;
+    }
+
+    /// One step on the schedule: hold, move, settle, each ending at a fixed time after the step
+    /// began, whatever the rule and the size of the term.
+    async fn beat(self: Rc<Self>, path: &Path, kind: Kind, next: Entry, schedule: Schedule) {
         let start = Schedule::now();
         let mut lifted = None;
         if Motion::enabled() {
-            let (rx, m) = (self.node(&path), self.matched(&path, kind));
+            let (rx, m) = (self.node(path), self.matched(path, kind));
             *self.hot().borrow_mut() = None;
             if let Some(rx) = &rx {
                 Doc::add(rx, &[Class::Firing]);
@@ -1000,17 +1013,12 @@ impl Bench {
             Cue::Hold.mark();
             schedule.until(start, Phase::Hold).await;
             Cue::Lift.mark();
-            lifted = Some(self.lift(&m, &path));
+            lifted = Some(self.lift(&m, path));
         }
-        let (now, env) = (self.session().term(), self.session().env());
-        self.session().push(Entry::new(
-            now.replace(&path, now.at(&path).expect("a redex inside the term").contract(kind, &env)),
-            Some(kind),
-            None,
-        ));
+        self.session().push(next);
         if let Some(lifted) = lifted {
             Cue::Move.mark();
-            leptos::task::spawn_local(self.move_to(&lifted, &path, schedule.clock()).play(schedule.clock()));
+            leptos::task::spawn_local(self.move_to(&lifted, path, schedule.clock()).play(schedule.clock()));
             schedule.until(start, Phase::Move).await;
             Cue::Moved.mark();
             schedule.until(start, Phase::Settle).await;

@@ -462,6 +462,28 @@ ghosts it reports when each starts and stops moving.
   one uid in two places. The fixtures changed deliberately: 20 random fixtures, 75 engine values
   and 58 blocks views, every difference only in fresh ids and the new `data-from` (checked by
   stripping ids and comparing).
+- Found: a renaming substituted a fresh variable and then prepared the result, so renamed nodes
+  recorded a never-drawn intermediate as `from`, and nothing could fly to them. Fixed: `derived`
+  records what a just-built node was itself built from, and a renaming derives each rewritten
+  variable from the occurrence it replaces. A second engine test checks that every `from` after
+  any step (a capturing β or ζ as α, then the step) names a node of the drawn term or a
+  definition. Five fixtures changed, in renamed nodes' `from` only.
+- Found: the automatic α was a hold followed by an instant swap. The renamed term replaced the
+  whole redex with fresh uids, so nothing could glide, and a wider name (`y` → `y₁`) shoved
+  everything after it sideways in one frame. Fixed: α is a firing like the others. Its rule now
+  has bindings on a λ or let (`x` the binder, `t` the body). The workbench replaces only the
+  smallest subtree whose text changes, so the redex and λ keep their uids. The α step then runs
+  the same hold, lift, move and settle as β: the binder and body are painted during Hold, the body
+  travels to where it lands, the old binder fades as the new one appears, and the context glides
+  around the wider name. `tempo.mjs` shows α as a row of its own, with the same timings as any
+  step.
+- Measured after these fixes, on `mix`, `beta`, `church`, `delta`, `alpha`, `capture`, a free-`f`
+  `Nat.rec`, a let-capture and `double (double 2)`, every step by Step: no node visible
+  throughout moves during Hold or Settle, no first or last frame of a move carries a node more
+  than a fifth of its way, and no node's path is longer than its straight line. Every ghost of a
+  firing starts on the same frame (within one frame, 16 ms). The ghosts stop moving visibly at
+  different frames because the ease-out makes a short trip look still sooner than a long one;
+  all share one window, `Role::Fly`.
 
 ### Height, fixed
 

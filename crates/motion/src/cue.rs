@@ -2,9 +2,9 @@
 /// browser check can read how long each part took.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cue {
-    /// A firing begins.
+    /// A step begins.
     Fire,
-    /// The automatic α step was pushed; its hold begins.
+    /// The automatic α step that a capturing β or ζ needs first begins.
     Alpha,
     /// The match is painted and the rule card shows the bindings; the hold begins.
     Hold,

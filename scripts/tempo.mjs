@@ -12,34 +12,32 @@ const { page, errors } = await open(browser, server, target, { motion: true, wid
 const marks = () => page.evaluate(() => performance.getEntriesByType('mark').filter(m => m.name.startsWith('redex:')).map(m => [m.name.slice(6), m.startTime]));
 const kinds = () => page.evaluate(() => [...document.querySelectorAll('[data-redex="workbench"] .rdx-trace li')].slice(1).map(li => li.querySelector('.rm').textContent));
 
-// Splits the marks into firings and measures each phase.
+// Splits the marks into steps (an automatic α is a step of its own) and measures each phase.
 const table = (list, kinds) => {
   const rows = [];
-  let row = null, k = 0;
+  let row = null;
   for (const [name, t] of list) {
-    if (name === 'fire') { row = { t0: t, at: { fire: t } }; rows.push(row); continue; }
+    if (name === 'fire' || name === 'alpha') { row = { t0: t, at: {} }; rows.push(row); continue; }
     row.at[name] = t;
   }
   return rows.map((r, i) => {
     const a = r.at, next = rows[i + 1]?.t0;
-    const alpha = a.alpha !== undefined ? a.hold - a.alpha : 0;
     return {
       step: i + 1,
-      rule: a.alpha !== undefined ? `${kinds[k++]}${kinds[k++]}` : kinds[k++],
-      alpha: Math.round(alpha),
+      rule: kinds[i],
       hold: Math.round(a.lift - a.hold),
       push: Math.round(a.move - a.lift),
       move: Math.round(a.moved - a.move),
       gap: next === undefined ? null : Math.round(next - a.moved),
-      total: Math.round(a.moved - a.fire),
+      total: Math.round(a.moved - r.t0),
     };
   });
 };
 
 const print = (title, rows) => {
   console.log(`\n${title}`);
-  console.log('step rule  α-hold  hold  push  move   gap  total');
-  rows.forEach(r => console.log(`${String(r.step).padStart(4)} ${r.rule.padEnd(4)} ${String(r.alpha).padStart(7)} ${String(r.hold).padStart(5)} ${String(r.push).padStart(5)} ${String(r.move).padStart(5)} ${String(r.gap ?? '-').padStart(5)} ${String(r.total).padStart(6)}`));
+  console.log('step rule  hold  push  move   gap  total');
+  rows.forEach(r => console.log(`${String(r.step).padStart(4)} ${r.rule.padEnd(4)} ${String(r.hold).padStart(5)} ${String(r.push).padStart(5)} ${String(r.move).padStart(5)} ${String(r.gap ?? '-').padStart(5)} ${String(r.total).padStart(6)}`));
   const totals = rows.map(r => r.total);
   console.log(`total: min ${Math.min(...totals)} max ${Math.max(...totals)} spread ${Math.max(...totals) - Math.min(...totals)} ms`);
 };
